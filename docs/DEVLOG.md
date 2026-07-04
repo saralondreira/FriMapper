@@ -5,7 +5,7 @@
 > implementadas**. Deve ser atualizado a cada iteração. Destina-se também a ser
 > publicado no **SharePoint da empresa** (ver secção *Publicação no SharePoint*).
 
-Última atualização: **2026-07-01**
+Última atualização: **2026-07-04**
 
 ---
 
@@ -51,6 +51,9 @@ ORM nem BD — só DTOs (`gui/dto.py`).
 - **Fase 5 — Empacotamento (PyInstaller + Graphviz):** ✅ `frimapper.spec`
   (onedir) + `tools/build_windows.ps1`; separação recursos/dados (#013);
   Graphviz empacotável via `GRAPHVIZ_HOME`. Binário validado com `--selftest`.
+- **Roadmap (1ª iteração pós-manual):** ✅ Testes de interação `QTest`
+  (8 checks, #016); *upload session* SharePoint >4 MB (#017); lock de versões
+  `requirements.lock` (#018).
 
 ## 4. Registo de Problemas Encontrados e Soluções
 
@@ -184,6 +187,39 @@ ORM nem BD — só DTOs (`gui/dto.py`).
   acede), evitando expor IPs/MACs guardados como campos livres ao perfil com
   masking.
 
+### 2026-07-04 · #016 — GUI validada por construção mas não por interação
+- **Problema:** o `gui_smoke.py` constrói janelas/diálogos mas não simula
+  cliques nem teclado — regressões em handlers de botões ou em fluxos de
+  formulário passariam despercebidas (limitação assinalada no MANUAL §24).
+- **Solução:** novo `tests/gui_interaction.py` (8 verificações, offscreen) com
+  `QtTest.QTest`: login por teclado+clique (sucesso e falha), preenchimento do
+  `DeviceDialog`, recarga de portas livres no `LinkDialog`, botões do diálogo
+  de campos dinâmicos, seleção de linha nos Equipamentos e ativação do seletor
+  de zona no separador Mapa.
+- **Limite que fica:** fluxos modais (`exec()`) continuam fora do âmbito — em
+  CI não há event loop bloqueante; cobri-los exigiria `QTimer` a fechar os
+  diálogos ou refactor para fluxos não-modais.
+
+### 2026-07-04 · #017 — Upload SharePoint limitado a 4 MB
+- **Problema:** o PUT simples da Graph API rejeita ficheiros > 4 MB; o export
+  CSV pode crescer além disso (e o executável, se vier a ser publicado,
+  ultrapassa-o de certeza).
+- **Solução:** implementado o *upload session* (`createUploadSession` + PUTs
+  por chunks múltiplos de 320 KiB com `Content-Range`, conflictBehavior
+  `replace`); o `upload()` escolhe automaticamente o caminho pelo tamanho.
+- **Estado:** tal como o resto do conector, escrito mas por validar num tenant
+  real (ver #008).
+
+### 2026-07-04 · #018 — Builds não reprodutíveis (versões flutuantes)
+- **Problema:** o `requirements.txt` usa gamas (`>=`); dois builds em datas
+  diferentes podem apanhar versões distintas e comportar-se de forma diferente
+  do que foi testado.
+- **Solução:** criado `requirements.lock` com o conjunto exato de versões com
+  que a 0.1.0 foi validada (smoke 35/35, GUI 12/12, QTest 8/8, selftest do
+  bundle). O `requirements.txt` mantém as gamas para desenvolvimento; builds de
+  release devem usar `pip install -r requirements.lock`. Ajustado o mínimo de
+  `cryptography` para refletir a versão realmente validada (41.x).
+
 ### (modelo para a próxima entrada)
 ### AAAA-MM-DD · #00N — Título curto
 - **Problema:** …
@@ -230,8 +266,11 @@ Requer app registada no Entra ID com permissão de aplicação
 
 ## 6. Próximos passos
 
-- Diálogos CRUD completos (Equipamentos, Zonas, Templates, Utilizadores).
-- Separador de gestão de utilizadores (criar contas, atribuir perfis) — Master.
-- Confirmação de force-delete com password de admin na GUI.
-- Biblioteca de ícones `Custom` (PLC, CCTV, régua, EV, solar, VoIP…).
-- Empacotamento PyInstaller + Graphviz e migração de schema (Alembic).
+- ~~Diálogos CRUD completos (Equipamentos, Zonas, Templates, Utilizadores).~~ ✅
+- ~~Separador de gestão de utilizadores (criar contas, atribuir perfis) — Master.~~ ✅
+- ~~Confirmação de force-delete com password de admin na GUI.~~ ✅
+- ~~Biblioteca de ícones `Custom` (PLC, CCTV, régua, EV, solar, VoIP…).~~ ✅
+- ~~Empacotamento PyInstaller + Graphviz~~ ✅ · migração de schema (Alembic) pendente.
+- Cobertura QTest de fluxos modais (force-delete de ponta a ponta na GUI).
+- Validação do conector SharePoint (incl. upload session) num tenant real.
+- Ícones definitivos (substituir os badges gerados).

@@ -132,7 +132,7 @@ netmap/
     └── views/            login_view, main_window, dialogs, tabs, node_synthesis_view
 assets/icons/*.png        12 ícones Custom (badges)
 tools/                    make_icons.py · seed_demo.py · build_windows.ps1
-tests/                    smoke_test.py · gui_smoke.py
+tests/                    smoke_test.py · gui_smoke.py · gui_interaction.py
 main.py                   entrypoint (+ --selftest)   ·   frimapper.spec
 ```
 
@@ -381,8 +381,8 @@ device_ids_in_location(id)` (recursivo). Criar uma nova ligação limpa o flag
 `integrations/sharepoint.py` (Microsoft Graph, client-credentials). Desligado por
 defeito. `client_secret` via env `NETMAP_SP_CLIENT_SECRET`. Requer app no Entra
 ID com `Sites.ReadWrite.All`; libs opcionais `msal`+`requests`. Ficheiros > 4 MB
-exigem upload session (por implementar). Import tardio — não é dependência de
-runtime.
+usam **upload session** (chunks múltiplos de 320 KiB — por validar em tenant
+real). Import tardio — não é dependência de runtime.
 
 ---
 
@@ -409,11 +409,12 @@ enabled/tenant_id/client_id/site/folder`.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt        # dev (gamas) · release: -r requirements.lock
 python main.py
 python main.py --selftest                               # valida núcleo sem GUI
 python tests/smoke_test.py                              # 35 verificações
 QT_QPA_PLATFORM=offscreen python tests/gui_smoke.py     # 12 verificações
+QT_QPA_PLATFORM=offscreen python tests/gui_interaction.py  # 8 verificações (QTest)
 python tools/seed_demo.py demo                          # dados + mapas (requer Graphviz)
 ```
 
@@ -456,9 +457,13 @@ Windows: `tools/build_windows.ps1`.
   pesquisa, export (não-vazamento), utilizadores/verify_admin, staleness.
 - **`tests/gui_smoke.py`** (12, offscreen): construção de janela/diálogos para os
   3 perfis, RBAC, masking, síntese, ligações, campos dinâmicos.
+- **`tests/gui_interaction.py`** (8, offscreen, `QtTest`): cliques e teclado
+  simulados — login (sucesso/falha), formulário de equipamento, recarga de
+  portas livres, botões dos campos dinâmicos, seleção de linhas, seletor de
+  vista do mapa.
 - **`main.py --selftest`**: valida o bundle empacotado.
-- **Limitação:** GUI validada por construção/lógica, não por cliques simulados
-  (sem ecrã em CI) → recomendado `QTest`.
+- **Limitação:** fluxos **modais** (`exec()`) não são exercitados em CI (sem
+  event loop bloqueante) — cobri-los exigiria fecho temporizado por `QTimer`.
 
 ---
 
@@ -493,8 +498,10 @@ by design; PySide6 + MVC; diagrams + Graphviz (geração diferida); PyInstaller
 
 ## 27. Roadmap
 
-Testes `QTest`; lock de versões; migração de schema (Alembic); ícones definitivos;
-validação do conector SharePoint; upload session (>4 MB).
+~~Testes `QTest`~~ ✅ (#016) · ~~lock de versões~~ ✅ (`requirements.lock`, #018)
+· ~~upload session (>4 MB)~~ ✅ (#017, por validar em tenant) · migração de
+schema (Alembic) · ícones definitivos · validação do conector SharePoint ·
+cobertura QTest de fluxos modais.
 
 ---
 
@@ -508,6 +515,7 @@ python tools/make_icons.py assets/icons
 python tools/seed_demo.py demo
 python tests/smoke_test.py
 QT_QPA_PLATFORM=offscreen python tests/gui_smoke.py
+QT_QPA_PLATFORM=offscreen python tests/gui_interaction.py
 pyinstaller frimapper.spec
 ```
 
