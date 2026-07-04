@@ -13,7 +13,8 @@ Segurança (ver DEVLOG #008):
 Requisitos no tenant: app registada no Entra ID com permissão de aplicação
 ``Sites.ReadWrite.All`` (consentimento de administrador).
 
-Limitação conhecida: ficheiros > 4 MB exigem *upload session* (por implementar).
+Ficheiros > 4 MB usam *upload session* da Graph API (chunks múltiplos de
+320 KiB) — implementado, por validar num tenant real (ver DEVLOG #017).
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from pathlib import Path
 from ..config import SharePointConfig
 
 _SIMPLE_UPLOAD_LIMIT = 4 * 1024 * 1024  # limite do PUT simples da Graph API
+# Os chunks do upload session têm de ser múltiplos de 320 KiB (Graph API).
+_CHUNK_SIZE = 10 * 320 * 1024
 
 
 class SharePointError(RuntimeError):
@@ -90,9 +93,7 @@ class SharePointClient:
         if not path.is_file():
             raise SharePointError(f"Ficheiro inexistente: {path}")
         if path.stat().st_size > _SIMPLE_UPLOAD_LIMIT:
-            raise SharePointError(
-                f"{path.name} excede 4 MB — upload session por implementar."
-            )
+            return self._upload_large(path)
         url = (
             f"{self.GRAPH}/sites/{self._site()}/drive/root:"
             f"/{self.config.folder}/{path.name}:/content"
@@ -106,6 +107,50 @@ class SharePointClient:
         if response.status_code not in (200, 201):
             raise SharePointError(f"Upload falhou ({response.status_code}): {response.text}")
         return response.json().get("webUrl", "")
+
+    def _upload_large(self, path: Path) -> str:
+        """Upload session da Graph API para ficheiros > 4 MB (chunked PUT)."""
+        url = (
+            f"{self.GRAPH}/sites/{self._site()}/drive/root:"
+            f"/{self.config.folder}/{path.name}:/createUploadSession"
+        )
+        response = self._requests.post(
+            url,
+            headers=self._headers,
+            json={"item": {"@microsoft.graph.conflictBehavior": "replace"}},
+            timeout=30,
+        )
+        if response.status_code not in (200, 201):
+            raise SharePointError(
+                f"createUploadSession falhou ({response.status_code}): {response.text}"
+            )
+        upload_url = response.json()["uploadUrl"]
+        size = path.stat().st_size
+        web_url = ""
+        with open(path, "rb") as fh:
+            offset = 0
+            while offset < size:
+                chunk = fh.read(_CHUNK_SIZE)
+                end = offset + len(chunk) - 1
+                # O uploadUrl já vem pré-autorizado — sem header Authorization.
+                result = self._requests.put(
+                    upload_url,
+                    headers={
+                        "Content-Length": str(len(chunk)),
+                        "Content-Range": f"bytes {offset}-{end}/{size}",
+                    },
+                    data=chunk,
+                    timeout=300,
+                )
+                if result.status_code not in (200, 201, 202):
+                    raise SharePointError(
+                        f"Chunk {offset}-{end} falhou "
+                        f"({result.status_code}): {result.text}"
+                    )
+                if result.status_code in (200, 201):
+                    web_url = result.json().get("webUrl", "")
+                offset += len(chunk)
+        return web_url
 
     def upload_many(self, paths: list[str | Path]) -> list[str]:
         return [self.upload(p) for p in paths]
