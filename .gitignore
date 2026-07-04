@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.venv-build/
+build/
+dist/
+*.egg-info/
+
+# Dados de runtime — nunca versionar (BD, chave de cifra, logs, mapas)
+*.db
+secret.key
+audit_network.log*
+maps/
+export_*/
+config.ini
