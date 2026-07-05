@@ -9,12 +9,21 @@ diretamente no Excel.
 from __future__ import annotations
 
 import csv
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from sqlalchemy import select
 
-from ..db.models import Device, DeviceAttribute, DeviceTemplate, Link, Location, Port
+from ..db.models import (
+    Device,
+    DeviceAttribute,
+    DeviceTemplate,
+    Link,
+    Location,
+    MaintenanceRecord,
+    Port,
+    Vlan,
+)
 from ..paths import data_dir
 from .bootstrap import AppContext
 
@@ -25,8 +34,16 @@ class ExportService:
     def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
 
-    def export_all(self, out_dir: str | Path | None = None) -> list[str]:
-        """Cria ``export_<timestamp>/`` com 6 CSV e devolve os caminhos."""
+    def export_all(
+        self,
+        out_dir: str | Path | None = None,
+        maintenance_since: date | None = None,
+    ) -> list[str]:
+        """Cria ``export_<timestamp>/`` com 8 CSV e devolve os caminhos.
+
+        ``maintenance_since`` filtra o ``manutencoes.csv`` para registos com
+        data igual ou posterior à indicada (None = histórico completo).
+        """
         base = Path(out_dir) if out_dir else data_dir()
         target = base / f"export_{datetime.now():%Y%m%d_%H%M%S}"
         target.mkdir(parents=True, exist_ok=True)
@@ -38,6 +55,8 @@ class ExportService:
             files.append(self._ports(session, target))
             files.append(self._links(session, target))
             files.append(self._attributes(session, target))
+            files.append(self._vlans(session, target))
+            files.append(self._maintenances(session, target, maintenance_since))
         if self.ctx.audit:
             self.ctx.audit.log("EXPORT", entity="csv", detail=str(target))
         return files
@@ -133,4 +152,33 @@ class ExportService:
         ]
         return self._write(
             target / "campos_dinamicos.csv", ["equipamento", "campo", "valor"], rows
+        )
+
+    def _vlans(self, session, target: Path) -> str:
+        rows = [
+            [v.id, v.vlan_id, v.name, v.description]
+            for v in session.scalars(select(Vlan).order_by(Vlan.vlan_id))
+        ]
+        return self._write(
+            target / "vlans.csv", ["id", "vlan_id", "nome", "descricao"], rows
+        )
+
+    def _maintenances(self, session, target: Path, since: date | None) -> str:
+        stmt = select(MaintenanceRecord).order_by(
+            MaintenanceRecord.date.desc(), MaintenanceRecord.id
+        )
+        if since is not None:
+            stmt = stmt.where(MaintenanceRecord.date >= since)
+        rows = [
+            [
+                m.id, m.device.hostname, m.date.isoformat(),
+                m.next_due.isoformat() if m.next_due else "",
+                m.status.value, m.technician, m.description,
+            ]
+            for m in session.scalars(stmt)
+        ]
+        return self._write(
+            target / "manutencoes.csv",
+            ["id", "equipamento", "data", "proxima", "estado", "tecnico", "descricao"],
+            rows,
         )

@@ -19,8 +19,10 @@ from ..db.models import (
     DeviceTemplate,
     Link,
     Location,
+    MaintenanceRecord,
     Port,
     User,
+    Vlan,
 )
 from ..domain.enums import LinkType, PortStatus, Role
 from .base import BaseRepository, DependencyError
@@ -265,6 +267,22 @@ class LinkRepository(BaseRepository):
             )
         return link
 
+    def set_status(self, link: Link, status: PortStatus, notes: str | None = None) -> None:
+        """Muda o estado da ligação (up/down) refletindo-o nas portas."""
+        link.status = status
+        port_status = PortStatus.UP if status == PortStatus.UP else PortStatus.DOWN
+        link.port_a.status = port_status
+        link.port_b.status = port_status
+        if notes is not None:
+            link.notes = notes
+        self.session.flush()
+        self._touch_db()
+        if self.audit:
+            self.audit.log(
+                "UPDATE", entity="Link", entity_id=link.id,
+                detail=f"status={status.value}",
+            )
+
     def dependencies(self, link: Link) -> list[str]:
         return []
 
@@ -274,3 +292,58 @@ class LinkRepository(BaseRepository):
         self._touch_db()
         if self.audit:
             self.audit.log("DELETE", entity="Link", entity_id=obj.id)
+
+
+class VlanRepository(BaseRepository):
+    model = Vlan
+    entity_name = "Vlan"
+
+    def by_vlan_id(self, vlan_id: int) -> Vlan | None:
+        return self.session.scalar(select(Vlan).where(Vlan.vlan_id == vlan_id))
+
+    def _users_of(self, vlan: Vlan) -> tuple[list[Device], list[Port]]:
+        """Equipamentos/portas cujo campo texto corresponde a str(vlan_id)."""
+        tag = str(vlan.vlan_id)
+        devices = list(self.session.scalars(select(Device).where(Device.vlan == tag)))
+        ports = list(self.session.scalars(select(Port).where(Port.vlan == tag)))
+        return devices, ports
+
+    def dependencies(self, vlan: Vlan) -> list[str]:
+        devices, ports = self._users_of(vlan)
+        deps = [f"equipamento: {d.hostname}" for d in devices]
+        deps += [f"porta: {p.device.hostname}:{p.name}" for p in ports]
+        return deps
+
+    def _cascade(self, vlan: Vlan) -> None:
+        # O force-delete não destrói equipamentos: limpa o campo VLAN neles.
+        devices, ports = self._users_of(vlan)
+        for device in devices:
+            device.vlan = ""
+        for port in ports:
+            port.vlan = ""
+        self.session.flush()
+
+
+class MaintenanceRepository(BaseRepository):
+    model = MaintenanceRecord
+    entity_name = "Maintenance"
+
+    def for_device(self, device_id: int) -> list[MaintenanceRecord]:
+        return list(
+            self.session.scalars(
+                select(MaintenanceRecord)
+                .where(MaintenanceRecord.device_id == device_id)
+                .order_by(MaintenanceRecord.date.desc())
+            )
+        )
+
+    def _audit(self, action: str, obj: MaintenanceRecord, detail: str = "") -> None:
+        if self.audit is None:
+            return
+        hostname = obj.device.hostname if obj.device else obj.device_id
+        self.audit.log(
+            action,
+            entity=self.entity_name,
+            entity_id=getattr(obj, "id", None),
+            detail=f"{hostname} {obj.date} {detail}".strip(),
+        )

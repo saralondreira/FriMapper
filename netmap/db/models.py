@@ -8,11 +8,12 @@ repositórios quando existem dependências.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
@@ -27,6 +28,7 @@ from ..domain.enums import (
     DeviceCategory,
     DeviceStatus,
     LinkType,
+    MaintenanceStatus,
     PortStatus,
     Role,
 )
@@ -168,6 +170,12 @@ class Device(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="DeviceAttribute.name",
     )
+    maintenances: Mapped[list["MaintenanceRecord"]] = relationship(
+        "MaintenanceRecord",
+        back_populates="device",
+        cascade="all, delete-orphan",
+        order_by="MaintenanceRecord.date.desc()",
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Device {self.hostname} ({self.category.value})>"
@@ -231,6 +239,55 @@ class DeviceAttribute(TimestampMixin, Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<DeviceAttribute {self.name}={self.value!r}>"
+
+
+class Vlan(TimestampMixin, Base):
+    """Catálogo de VLANs.
+
+    Tabela ADITIVA: os campos ``Device.vlan``/``Port.vlan`` continuam texto
+    (compatibilidade com BDs existentes até haver migrações Alembic); o
+    catálogo alimenta os dropdowns e valida a eliminação por correspondência
+    exata com ``str(vlan_id)``.
+    """
+
+    __tablename__ = "vlans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vlan_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    description: Mapped[str] = mapped_column(String(255), default="")
+
+    @property
+    def label(self) -> str:
+        return f"{self.vlan_id} — {self.name}" if self.name else str(self.vlan_id)
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<Vlan {self.vlan_id} {self.name!r}>"
+
+
+class MaintenanceRecord(TimestampMixin, Base):
+    """Registo de manutenção de um equipamento (agendada/realizada), com datas.
+
+    O histórico morre com o equipamento (cascade ORM) — não bloqueia a
+    eliminação, ao contrário das portas ocupadas.
+    """
+
+    __tablename__ = "maintenance_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id"), nullable=False)
+    date: Mapped[date] = mapped_column(Date)
+    next_due: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    status: Mapped[MaintenanceStatus] = mapped_column(
+        _enum(MaintenanceStatus), default=MaintenanceStatus.PLANNED
+    )
+    technician: Mapped[str] = mapped_column(String(128), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+
+    device: Mapped[Device] = relationship("Device", back_populates="maintenances")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<MaintenanceRecord {self.device_id}@{self.date}>"
 
 
 class SystemMeta(Base):

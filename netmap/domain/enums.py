@@ -68,3 +68,17 @@ class DeviceStatus(str, Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
     UNKNOWN = "unknown"
+
+
+class MaintenanceStatus(str, Enum):
+    PLANNED = "planned"
+    DONE = "done"
+    CANCELLED = "cancelled"
+
+    @property
+    def label(self) -> str:
+        return {
+            MaintenanceStatus.PLANNED: "Agendada",
+            MaintenanceStatus.DONE: "Realizada",
+            MaintenanceStatus.CANCELLED: "Cancelada",
+        }[self]

@@ -1,4 +1,4 @@
-"""Smoke test do núcleo (sem GUI) — 35 verificações.
+"""Smoke test do núcleo (sem GUI) — 40 verificações.
 
 Corre contra uma pasta de dados temporária (env FRIMAPPER_DATA), pelo que
 nunca toca em dados reais. Uso: ``python tests/smoke_test.py``.
@@ -19,15 +19,27 @@ os.environ["FRIMAPPER_DATA"] = _tmp.name
 from sqlalchemy import text  # noqa: E402
 
 from netmap.config import AppConfig  # noqa: E402
-from netmap.db.models import DeviceTemplate, Location  # noqa: E402
-from netmap.domain.enums import DeviceCategory, PortStatus, Role  # noqa: E402
+from netmap.db.models import (  # noqa: E402
+    DeviceTemplate,
+    Location,
+    MaintenanceRecord,
+    Vlan,
+)
+from netmap.domain.enums import (  # noqa: E402
+    DeviceCategory,
+    MaintenanceStatus,
+    PortStatus,
+    Role,
+)
 from netmap.repositories.base import DependencyError  # noqa: E402
 from netmap.repositories.meta import set_meta  # noqa: E402
 from netmap.repositories.repositories import (  # noqa: E402
     DeviceRepository,
     LinkRepository,
     LocationRepository,
+    MaintenanceRepository,
     TemplateRepository,
+    VlanRepository,
 )
 from netmap.security.auth import hash_password, verify_password  # noqa: E402
 from netmap.security.rbac import (  # noqa: E402
@@ -252,10 +264,69 @@ with ctx.db.session() as s:
     check("pesquisa devolve o switch/porta onde está ligado",
           "SW-A2:Gi0/1" in hit.connected_to)
 
+# --------------------------------------------- VLANs e manutenções
+with ctx.db.session() as s:
+    vlan_repo = VlanRepository(s, ctx.audit)
+    dev_repo = DeviceRepository(s, ctx.audit)
+    maint_repo = MaintenanceRepository(s, ctx.audit)
+
+    vlan10 = vlan_repo.add(Vlan(vlan_id=10, name="Gestão"))
+    pc = dev_repo.by_hostname("PC-01")
+    dev_repo.update(pc, vlan="10")
+    try:
+        vlan_repo.delete(vlan10)
+        vlan_blocked = False
+    except DependencyError:
+        vlan_blocked = True
+    check("VLAN em uso não pode ser eliminada", vlan_blocked)
+
+    vlan_repo.delete(vlan10, force=True)
+    check("force-delete de VLAN limpa o campo nos equipamentos", pc.vlan == "")
+
+    from datetime import date, timedelta
+
+    record = maint_repo.add(
+        MaintenanceRecord(
+            device_id=pc.id,
+            date=date.today(),
+            next_due=date.today() + timedelta(days=180),
+            status=MaintenanceStatus.DONE,
+            technician="tec1",
+            description="Limpeza e atualização de firmware",
+        )
+    )
+    check(
+        "manutenção registada com data e próxima intervenção",
+        len(maint_repo.for_device(pc.id)) == 1
+        and record.next_due > record.date,
+    )
+
+    temp = dev_repo.create_from_template(
+        "TMP-01", None, category=DeviceCategory.COMPUTADOR
+    )
+    maint_repo.add(MaintenanceRecord(device_id=temp.id, date=date.today()))
+    dev_repo.delete(temp)  # sem ligações → eliminação normal
+    check(
+        "histórico de manutenções morre com o equipamento (cascade)",
+        len(maint_repo.for_device(temp.id)) == 0,
+    )
+
 # ------------------------------------------------------------- export CSV
 files = ExportService(ctx).export_all(data)
-check("export cria os 6 ficheiros CSV", len(files) == 6
+check("export cria os 8 ficheiros CSV", len(files) == 8
       and all(Path(f).is_file() for f in files))
+from datetime import date as _date, timedelta as _timedelta  # noqa: E402
+
+filtered = ExportService(ctx).export_all(
+    data, maintenance_since=_date.today() + _timedelta(days=1)
+)
+maint_csv = Path(
+    [f for f in filtered if f.endswith("manutencoes.csv")][0]
+).read_text(encoding="utf-8-sig")
+check(
+    "export com data filtra as manutenções (só cabeçalho)",
+    len(maint_csv.strip().splitlines()) == 1,
+)
 devices_csv = Path([f for f in files if f.endswith("equipamentos.csv")][0]).read_text(
     encoding="utf-8-sig"
 )
