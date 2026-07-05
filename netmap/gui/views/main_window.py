@@ -12,7 +12,6 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -37,22 +36,35 @@ from ..controllers.device_controller import DeviceController
 from ..controllers.export_controller import ExportController
 from ..controllers.link_controller import LinkController
 from ..controllers.location_controller import LocationController
+from ..controllers.maintenance_controller import MaintenanceController
 from ..controllers.map_controller import MapController
+from ..controllers.port_controller import PortController
 from ..controllers.search_controller import SearchController
 from ..controllers.template_controller import TemplateController
 from ..controllers.user_controller import UserController
+from ..controllers.vlan_controller import VlanController
 from ..models.device_table_model import DeviceTableModel
 from ..session import UserSession
 from .dialogs import (
     AdminPasswordDialog,
     DeviceAttributesDialog,
     DeviceDialog,
+    ExportDialog,
     LinkDialog,
     confirm_force_delete,
     show_orphan_alert,
 )
 from .node_synthesis_view import NodeSynthesisView
-from .tabs import LocationsTab, TemplatesTab, UsersTab
+from .ports_dialog import PortsDialog
+from .tabs import (
+    FirewallsTab,
+    LinksTab,
+    LocationsTab,
+    MaintenancesTab,
+    TemplatesTab,
+    UsersTab,
+    VlansTab,
+)
 
 
 class MapWorker(QThread):
@@ -90,12 +102,16 @@ class DevicesTab(QWidget):
         session: UserSession,
         auth: AuthController,
         on_change,
+        ports: PortController | None = None,
+        vlans: VlanController | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.devices = devices
         self.links = links
         self.exports = exports
+        self.ports = ports
+        self.vlans = vlans
         self.session = session
         self.auth = auth
         self.on_change = on_change
@@ -115,12 +131,14 @@ class DevicesTab(QWidget):
         self.edit_button = QPushButton("Editar")
         self.delete_button = QPushButton("Eliminar")
         self.link_button = QPushButton("Ligar…")
+        self.ports_button = QPushButton("Portas…")
         self.fields_button = QPushButton("Campos…")
         self.export_button = QPushButton("Exportar CSV")
         self.add_button.clicked.connect(self._add)
         self.edit_button.clicked.connect(self._edit)
         self.delete_button.clicked.connect(self._delete)
         self.link_button.clicked.connect(self._link)
+        self.ports_button.clicked.connect(self._ports)
         self.fields_button.clicked.connect(self._fields)
         self.export_button.clicked.connect(self._export)
         for button in (
@@ -128,6 +146,7 @@ class DevicesTab(QWidget):
             self.edit_button,
             self.delete_button,
             self.link_button,
+            self.ports_button,
             self.fields_button,
             self.export_button,
         ):
@@ -139,6 +158,9 @@ class DevicesTab(QWidget):
         self.edit_button.setEnabled(session.can(Permission.EDIT))
         self.delete_button.setEnabled(session.can(Permission.DELETE))
         self.link_button.setEnabled(session.can(Permission.CREATE))
+        self.ports_button.setEnabled(
+            self.ports is not None and session.can(Permission.VIEW)
+        )
         self.fields_button.setEnabled(session.can(Permission.EDIT))
         self.export_button.setEnabled(session.can(Permission.EXPORT))
 
@@ -155,9 +177,14 @@ class DevicesTab(QWidget):
         self.refresh()
         self.on_change()
 
+    def _vlan_labels(self) -> list[str]:
+        return self.vlans.labels() if self.vlans is not None else []
+
     def _add(self) -> None:
         dialog = DeviceDialog(
-            self.devices.template_options(), self.devices.location_options()
+            self.devices.template_options(),
+            self.devices.location_options(),
+            vlan_options=self._vlan_labels(),
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -175,6 +202,7 @@ class DevicesTab(QWidget):
             self.devices.template_options(),
             self.devices.location_options(),
             self.devices.get_form(device_id),
+            vlan_options=self._vlan_labels(),
         )
         if dialog.exec() != QDialog.Accepted:
             return
@@ -183,6 +211,20 @@ class DevicesTab(QWidget):
             self._changed()
         except Exception as exc:
             QMessageBox.warning(self, "Erro", str(exc))
+
+    def _ports(self) -> None:
+        device_id = self.selected_id()
+        if device_id is None or self.ports is None:
+            return
+        indexes = self.view.selectionModel().selectedRows()
+        hostname = self.model.row_hostname(indexes[0].row())
+        dialog = PortsDialog(
+            self.ports, device_id, hostname, self.session,
+            vlan_options=self._vlan_labels(), parent=self,
+        )
+        dialog.exec()
+        if dialog.changed:
+            self._changed()
 
     def _delete(self) -> None:
         device_id = self.selected_id()
@@ -260,29 +302,8 @@ class DevicesTab(QWidget):
             QMessageBox.warning(self, "Erro", str(exc))
 
     def _export(self) -> None:
-        directory = QFileDialog.getExistingDirectory(self, "Pasta de destino")
-        if not directory:
-            return
-        try:
-            files = self.exports.export_csv(directory)
-        except Exception as exc:
-            QMessageBox.warning(self, "Erro", str(exc))
-            return
-        message = f"{len(files)} ficheiros CSV exportados."
-        if self.exports.sharepoint_enabled():
-            answer = QMessageBox.question(
-                self, "SharePoint",
-                message + "\n\nPublicar também no SharePoint?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            if answer == QMessageBox.Yes:
-                try:
-                    self.exports.upload_to_sharepoint(files)
-                    message += "\nPublicados no SharePoint."
-                except Exception as exc:
-                    QMessageBox.warning(self, "SharePoint", str(exc))
-        QMessageBox.information(self, "Exportação", message)
+        # Janela de exportação com data visível e filtro de manutenções.
+        ExportDialog(self.exports, self).exec()
 
     def _show_synthesis(self, index) -> None:
         device_id = self.model.row_id(index.row())
@@ -428,6 +449,9 @@ class MainWindow(QMainWindow):
         self.auth = AuthController(ctx)
         self.devices = DeviceController(ctx, session)
         self.links = LinkController(ctx, session)
+        self.ports = PortController(ctx, session)
+        self.vlans = VlanController(ctx, session)
+        self.maintenances = MaintenanceController(ctx, session)
         self.locations = LocationController(ctx, session)
         self.templates = TemplateController(ctx, session)
         self.maps = MapController(ctx, session)
@@ -473,7 +497,22 @@ class MainWindow(QMainWindow):
             self.exports,
             session,
             self.auth,
-            self.refresh_banners,
+            self._structure_changed,
+            ports=self.ports,
+            vlans=self.vlans,
+        )
+        self.links_tab = LinksTab(
+            self.links, session, self.auth, self._structure_changed
+        )
+        self.vlans_tab = VlansTab(
+            self.vlans, session, self.auth, self._structure_changed
+        )
+        self.firewalls_tab = FirewallsTab(
+            self.devices, self.ports, self.vlans, session, self.auth,
+            self._structure_changed,
+        )
+        self.maintenances_tab = MaintenancesTab(
+            self.maintenances, session, self.auth, self.refresh_banners
         )
         self.locations_tab = LocationsTab(
             self.locations, session, self.auth, self._structure_changed
@@ -483,6 +522,10 @@ class MainWindow(QMainWindow):
         )
         self.map_tab = MapTab(self.maps, self.devices, session)
         self.tabs.addTab(self.devices_tab, "Equipamentos")
+        self.tabs.addTab(self.links_tab, "Ligações")
+        self.tabs.addTab(self.vlans_tab, "VLANs")
+        self.tabs.addTab(self.firewalls_tab, "Firewalls")
+        self.tabs.addTab(self.maintenances_tab, "Manutenções")
         self.tabs.addTab(self.locations_tab, "Localizações")
         self.tabs.addTab(self.templates_tab, "Templates")
         self.tabs.addTab(self.map_tab, "Mapa")
@@ -510,8 +553,10 @@ class MainWindow(QMainWindow):
         self.orphan_banner.setVisible(bool(orphans))
 
     def _structure_changed(self) -> None:
-        """Zonas/templates mudaram: atualizar equipamentos, mapa e banners."""
+        """A estrutura mudou: atualizar equipamentos, ligações, mapa e banners."""
         self.devices_tab.refresh()
+        self.links_tab.refresh()
+        self.firewalls_tab.refresh()
         self.map_tab.refresh()
         self.refresh_banners()
 

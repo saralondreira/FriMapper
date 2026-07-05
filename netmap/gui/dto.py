@@ -126,6 +126,84 @@ class SynthesisView:
 
 
 @dataclass
+class PortRow:
+    id: int
+    name: str
+    speed: str
+    status: str
+    vlan: str
+    is_uplink: bool
+    connected_to: str
+
+
+@dataclass
+class PortForm:
+    name: str = ""
+    speed: str = ""
+    vlan: str = ""
+    is_uplink: bool = False
+
+
+@dataclass
+class LinkRow:
+    id: int
+    device_a: str
+    port_a: str
+    device_b: str
+    port_b: str
+    link_type: str
+    status: str
+    notes: str
+
+
+@dataclass
+class VlanRow:
+    id: int
+    vlan_id: int
+    name: str
+    description: str
+    usage_count: int
+
+
+@dataclass
+class VlanForm:
+    vlan_id: int = 1
+    name: str = ""
+    description: str = ""
+
+
+@dataclass
+class FirewallRow:
+    id: int
+    hostname: str
+    location: str
+    ip_mgmt: str
+    status: str
+    wan_ports: int
+
+
+@dataclass
+class MaintenanceRow:
+    id: int
+    hostname: str
+    date: str
+    next_due: str
+    status: str
+    technician: str
+    description: str
+
+
+@dataclass
+class MaintenanceForm:
+    device_id: int | None = None
+    date: str = ""  # ISO (AAAA-MM-DD)
+    next_due: str = ""  # ISO ou vazio
+    status: str = "planned"
+    technician: str = ""
+    description: str = ""
+
+
+@dataclass
 class SearchHit:
     device_id: int
     hostname: str

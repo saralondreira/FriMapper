@@ -1,4 +1,4 @@
-"""Smoke test da GUI (offscreen, sem display) — 12 verificações.
+"""Smoke test da GUI (offscreen, sem display) — 16 verificações.
 
 Constrói janela, tabs e diálogos para os 3 perfis SEM ``exec()`` — apanha
 erros de import/construção que o ``py_compile`` não vê (DEVLOG #012).
@@ -106,22 +106,22 @@ session_tech = auth.login("tec1", "Password1!")
 session_maint = auth.login("man1", "Password1!")
 
 # ----------------------------------------------------------- MainWindow
+ALL_TABS = [
+    "Equipamentos", "Ligações", "VLANs", "Firewalls", "Manutenções",
+    "Localizações", "Templates", "Mapa", "Utilizadores",
+]
 window_master = MainWindow(ctx, session_master)
 tab_names_master = [
     window_master.tabs.tabText(i) for i in range(window_master.tabs.count())
 ]
-check(
-    "MainWindow (Master) tem os 5 separadores",
-    tab_names_master
-    == ["Equipamentos", "Localizações", "Templates", "Mapa", "Utilizadores"],
-)
+check("MainWindow (Master) tem os 9 separadores", tab_names_master == ALL_TABS)
 
 window_tech = MainWindow(ctx, session_tech)
 tab_names_tech = [
     window_tech.tabs.tabText(i) for i in range(window_tech.tabs.count())
 ]
 check("MainWindow (Técnico) não tem separador Utilizadores",
-      "Utilizadores" not in tab_names_tech and len(tab_names_tech) == 4)
+      tab_names_tech == ALL_TABS[:-1])
 
 window_maint = MainWindow(ctx, session_maint)
 devices_tab = window_maint.devices_tab
@@ -179,6 +179,50 @@ check("DeviceAttributesDialog lê/edita pares chave-valor",
 synthesis_view = NodeSynthesisView(device_ctl.synthesis(sw_id), session_master)
 check("NodeSynthesisView constrói a tabela de portas",
       synthesis_view.table.rowCount() == 8)
+
+# -------------------------------------- novos separadores e janelas CRUD
+from netmap.gui.controllers.vlan_controller import VlanController  # noqa: E402
+from netmap.gui.dto import VlanForm  # noqa: E402
+
+vlan_ctl = VlanController(ctx, session_master)
+vlan_ctl.create(VlanForm(vlan_id=20, name="Escritório"))
+window_master.vlans_tab.refresh()
+check(
+    "VlansTab lista o catálogo com contagem de utilização",
+    window_master.vlans_tab.table.rowCount() == 1
+    and window_master.vlans_tab.table.item(0, 0).text() == "20",
+)
+
+links_tab = window_master.links_tab
+check(
+    "LinksTab lista a ligação SW-A1:Gi0/1 ↔ PC-01:eth0",
+    links_tab.table.rowCount() == 1
+    and links_tab.table.item(0, 0).text() == "SW-A1"
+    and links_tab.table.item(0, 3).text() == "eth0",
+)
+
+from netmap.gui.controllers.port_controller import PortController  # noqa: E402
+from netmap.gui.views.ports_dialog import PortsDialog  # noqa: E402
+
+ports_dialog = PortsDialog(
+    PortController(ctx, session_master), sw_id, "SW-A1", session_master,
+    vlan_options=vlan_ctl.labels(),
+)
+check(
+    "PortsDialog lista as 8 portas do switch (1 ligada)",
+    ports_dialog.table.rowCount() == 8
+    and ports_dialog.table.item(0, 5).text() == "PC-01:eth0",
+)
+
+from netmap.gui.views.dialogs import ExportDialog  # noqa: E402
+from datetime import datetime  # noqa: E402
+
+export_dialog = ExportDialog(window_master.exports)
+check(
+    "ExportDialog mostra a data e a pasta com timestamp",
+    str(datetime.now().year) in export_dialog.date_label.text()
+    and "export_" in export_dialog.folder_label.text(),
+)
 
 # ------------------------------------------------------- banner de órfãos
 with ctx.db.session() as s:

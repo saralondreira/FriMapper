@@ -1,4 +1,4 @@
-"""Testes de interação da GUI com QTest (offscreen) — 8 verificações.
+"""Testes de interação da GUI com QTest (offscreen) — 10 verificações.
 
 Complementa o ``gui_smoke.py`` (que apenas constrói widgets): aqui os fluxos
 são exercitados com cliques e teclado SIMULADOS (``QtTest.QTest``), cobrindo
@@ -197,6 +197,37 @@ check(
     enabled_for_location and not map_tab.location_combo.isEnabled(),
 )
 window.hide()
+
+# ------------------------------------- ExportDialog: filtro de data (clique)
+from netmap.gui.views.dialogs import ExportDialog, VlanDialog  # noqa: E402
+
+export_dialog = ExportDialog(window.exports)
+export_dialog.show()
+was_disabled = not export_dialog.since_edit.isEnabled()
+QTest.mouseClick(export_dialog.since_check, Qt.LeftButton)
+check(
+    "Exportação: clique no filtro de data ativa o seletor 'Desde'",
+    was_disabled
+    and export_dialog.since_edit.isEnabled()
+    and export_dialog.maintenance_since() is not None,
+)
+export_dialog.hide()
+
+# --------------------------------------------- VlanDialog por teclado
+vlan_dialog = VlanDialog()
+vlan_dialog.show()
+vlan_dialog.vlan_id_spin.clear()
+QTest.keyClicks(vlan_dialog.vlan_id_spin, "30")
+QTest.keyClicks(vlan_dialog.name_edit, "CCTV")
+click_ok(vlan_dialog)
+vlan_form = vlan_dialog.form()
+check(
+    "VlanDialog: teclado preenche VLAN ID e nome; OK aceita",
+    vlan_dialog.result() == QDialog.Accepted
+    and vlan_form.vlan_id == 30
+    and vlan_form.name == "CCTV",
+)
+vlan_dialog.hide()
 
 print(f"\n{PASSED} verificações OK, {FAILED} falhas")
 sys.exit(1 if FAILED else 0)

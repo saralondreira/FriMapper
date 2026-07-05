@@ -5,11 +5,16 @@ Todos os diálogos trabalham exclusivamente com DTOs (gui/dto.py).
 
 from __future__ import annotations
 
+from datetime import date, datetime
+
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -23,9 +28,18 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ...domain.enums import DeviceCategory, DeviceStatus, Role
+from ...domain.enums import DeviceCategory, DeviceStatus, MaintenanceStatus, Role
 from ..controllers.auth_controller import AuthController
-from ..dto import DeviceForm, LocationForm, Option, TemplateForm, UserForm
+from ..dto import (
+    DeviceForm,
+    LocationForm,
+    MaintenanceForm,
+    Option,
+    PortForm,
+    TemplateForm,
+    UserForm,
+    VlanForm,
+)
 
 #: Sugestões de campos dinâmicos comuns (DEVLOG #015).
 COMMON_ATTRIBUTES = [
@@ -60,11 +74,13 @@ class DeviceDialog(QDialog):
         templates: list[Option],
         locations: list[Option],
         form: DeviceForm | None = None,
+        vlan_options: list[str] | None = None,
+        fixed_category: str | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.is_edit = form is not None
-        form = form or DeviceForm()
+        form = form or DeviceForm(category=fixed_category or "computador")
         self.setWindowTitle("Editar equipamento" if self.is_edit else "Novo equipamento")
 
         layout = QFormLayout(self)
@@ -80,6 +96,10 @@ class DeviceDialog(QDialog):
         for cat in DeviceCategory:
             self.category_combo.addItem(cat.value, cat.value)
         self.category_combo.setCurrentText(form.category)
+        if fixed_category is not None:
+            # Janela dedicada (ex.: firewalls): a categoria fica trancada.
+            self.category_combo.setCurrentText(fixed_category)
+            self.category_combo.setEnabled(False)
         layout.addRow("Categoria:", self.category_combo)
 
         self.location_combo = QComboBox()
@@ -94,13 +114,18 @@ class DeviceDialog(QDialog):
 
         self.ip_edit = QLineEdit(form.ip_mgmt)
         self.mac_edit = QLineEdit(form.mac)
-        self.vlan_edit = QLineEdit(form.vlan)
+        self.vlan_combo = QComboBox()
+        self.vlan_combo.setEditable(True)
+        self.vlan_combo.addItem("")
+        for vlan_label in vlan_options or []:
+            self.vlan_combo.addItem(vlan_label)
+        self.vlan_combo.setCurrentText(form.vlan)
         self.os_edit = QLineEdit(form.os_detected)
         self.user_edit = QLineEdit(form.assigned_user)
         self.serial_edit = QLineEdit(form.serial_number)
         layout.addRow("IP de gestão:", self.ip_edit)
         layout.addRow("MAC:", self.mac_edit)
-        layout.addRow("VLAN:", self.vlan_edit)
+        layout.addRow("VLAN (catálogo):", self.vlan_combo)
         layout.addRow("SO detetado:", self.os_edit)
         layout.addRow("Utilizador:", self.user_edit)
         layout.addRow("Nº de série:", self.serial_edit)
@@ -130,7 +155,7 @@ class DeviceDialog(QDialog):
             status=self.status_combo.currentData() or self.status_combo.currentText(),
             ip_mgmt=self.ip_edit.text().strip(),
             mac=self.mac_edit.text().strip(),
-            vlan=self.vlan_edit.text().strip(),
+            vlan=self.vlan_combo.currentText().strip(),
             os_detected=self.os_edit.text().strip(),
             assigned_user=self.user_edit.text().strip(),
             serial_number=self.serial_edit.text().strip(),
@@ -364,6 +389,262 @@ class DeviceAttributesDialog(QDialog):
             if name:
                 result.append((name, value))
         return result
+
+
+class VlanDialog(QDialog):
+    """Criação/edição de uma VLAN do catálogo."""
+
+    def __init__(self, form: VlanForm | None = None, parent=None):
+        super().__init__(parent)
+        form = form or VlanForm()
+        self.setWindowTitle("VLAN")
+        layout = QFormLayout(self)
+        self.vlan_id_spin = QSpinBox()
+        self.vlan_id_spin.setRange(1, 4094)
+        self.vlan_id_spin.setValue(form.vlan_id)
+        self.name_edit = QLineEdit(form.name)
+        self.description_edit = QLineEdit(form.description)
+        layout.addRow("VLAN ID* (1–4094):", self.vlan_id_spin)
+        layout.addRow("Nome:", self.name_edit)
+        layout.addRow("Descrição:", self.description_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def form(self) -> VlanForm:
+        return VlanForm(
+            vlan_id=self.vlan_id_spin.value(),
+            name=self.name_edit.text().strip(),
+            description=self.description_edit.text().strip(),
+        )
+
+
+class MaintenanceDialog(QDialog):
+    """Registo de manutenção: equipamento, datas, estado, técnico, descrição."""
+
+    def __init__(
+        self,
+        devices: list[Option],
+        form: MaintenanceForm | None = None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        form = form or MaintenanceForm(date=date.today().isoformat())
+        self.setWindowTitle("Manutenção")
+        layout = QFormLayout(self)
+
+        self.device_combo = QComboBox()
+        _fill_combo(self.device_combo, devices, form.device_id)
+        layout.addRow("Equipamento*:", self.device_combo)
+
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.date_edit.setDate(
+            QDate.fromString(form.date, "yyyy-MM-dd") if form.date else QDate.currentDate()
+        )
+        layout.addRow("Data*:", self.date_edit)
+
+        self.status_combo = QComboBox()
+        for status in MaintenanceStatus:
+            self.status_combo.addItem(status.label, status.value)
+        for i in range(self.status_combo.count()):
+            if self.status_combo.itemData(i) == form.status:
+                self.status_combo.setCurrentIndex(i)
+        layout.addRow("Estado:", self.status_combo)
+
+        self.next_check = QCheckBox("Agendar próxima manutenção")
+        self.next_due_edit = QDateEdit()
+        self.next_due_edit.setCalendarPopup(True)
+        self.next_due_edit.setDisplayFormat("yyyy-MM-dd")
+        if form.next_due:
+            self.next_check.setChecked(True)
+            self.next_due_edit.setDate(QDate.fromString(form.next_due, "yyyy-MM-dd"))
+        else:
+            self.next_due_edit.setDate(QDate.currentDate().addMonths(6))
+            self.next_due_edit.setEnabled(False)
+        self.next_check.toggled.connect(self.next_due_edit.setEnabled)
+        layout.addRow("", self.next_check)
+        layout.addRow("Próxima data:", self.next_due_edit)
+
+        self.technician_edit = QLineEdit(form.technician)
+        layout.addRow("Técnico:", self.technician_edit)
+        self.description_edit = QTextEdit(form.description)
+        self.description_edit.setMaximumHeight(80)
+        layout.addRow("Descrição:", self.description_edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def form(self) -> MaintenanceForm:
+        return MaintenanceForm(
+            device_id=self.device_combo.currentData(),
+            date=self.date_edit.date().toString("yyyy-MM-dd"),
+            next_due=(
+                self.next_due_edit.date().toString("yyyy-MM-dd")
+                if self.next_check.isChecked()
+                else ""
+            ),
+            status=self.status_combo.currentData(),
+            technician=self.technician_edit.text().strip(),
+            description=self.description_edit.toPlainText(),
+        )
+
+
+class PortDialog(QDialog):
+    """Criação/edição de uma porta (o estado é derivado das ligações)."""
+
+    def __init__(
+        self,
+        form: PortForm | None = None,
+        vlan_options: list[str] | None = None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        form = form or PortForm()
+        self.setWindowTitle("Porta")
+        layout = QFormLayout(self)
+        self.name_edit = QLineEdit(form.name)
+        self.speed_edit = QLineEdit(form.speed)
+        self.vlan_combo = QComboBox()
+        self.vlan_combo.setEditable(True)
+        self.vlan_combo.addItem("")
+        for vlan_label in vlan_options or []:
+            self.vlan_combo.addItem(vlan_label)
+        self.vlan_combo.setCurrentText(form.vlan)
+        self.uplink_check = QCheckBox("Uplink / interface WAN")
+        self.uplink_check.setChecked(form.is_uplink)
+        layout.addRow("Nome*:", self.name_edit)
+        layout.addRow("Velocidade:", self.speed_edit)
+        layout.addRow("VLAN (catálogo):", self.vlan_combo)
+        layout.addRow("", self.uplink_check)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def form(self) -> PortForm:
+        return PortForm(
+            name=self.name_edit.text().strip(),
+            speed=self.speed_edit.text().strip(),
+            vlan=self.vlan_combo.currentText().strip(),
+            is_uplink=self.uplink_check.isChecked(),
+        )
+
+
+class LinkEditDialog(QDialog):
+    """Edição de uma ligação existente: estado (up/down) e notas."""
+
+    def __init__(self, description: str, down: bool, notes: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Editar ligação")
+        layout = QFormLayout(self)
+        layout.addRow(QLabel(description))
+        self.down_check = QCheckBox("Ligação em baixo (down)")
+        self.down_check.setChecked(down)
+        self.notes_edit = QLineEdit(notes)
+        layout.addRow("", self.down_check)
+        layout.addRow("Notas:", self.notes_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def values(self) -> tuple[bool, str]:
+        return self.down_check.isChecked(), self.notes_edit.text()
+
+
+class ExportDialog(QDialog):
+    """Janela de exportação CSV, com data visível e filtro de manutenções.
+
+    A data/hora da exportação é estampada no nome da pasta
+    (``export_<timestamp>/``) e mostrada aqui antes de confirmar.
+    """
+
+    def __init__(self, exports, parent=None):
+        super().__init__(parent)
+        self.exports = exports
+        self.exported_files: list[str] = []
+        self.setWindowTitle("Exportar base de dados para CSV")
+        layout = QFormLayout(self)
+
+        self._timestamp = datetime.now()
+        self.date_label = QLabel(
+            f"<b>Data da exportação:</b> {self._timestamp:%Y-%m-%d %H:%M:%S}"
+        )
+        layout.addRow(self.date_label)
+        self.folder_label = QLabel(
+            f"Pasta a criar: export_{self._timestamp:%Y%m%d_%H%M%S}/ (8 CSV)"
+        )
+        layout.addRow(self.folder_label)
+
+        dir_row = QHBoxLayout()
+        self.dir_edit = QLineEdit()
+        self.dir_edit.setPlaceholderText("Pasta de destino…")
+        browse_button = QPushButton("Procurar…")
+        browse_button.clicked.connect(self._browse)
+        dir_row.addWidget(self.dir_edit)
+        dir_row.addWidget(browse_button)
+        layout.addRow("Destino*:", dir_row)
+
+        self.since_check = QCheckBox("Exportar apenas manutenções desde:")
+        self.since_edit = QDateEdit()
+        self.since_edit.setCalendarPopup(True)
+        self.since_edit.setDisplayFormat("yyyy-MM-dd")
+        self.since_edit.setDate(QDate.currentDate().addYears(-1))
+        self.since_edit.setEnabled(False)
+        self.since_check.toggled.connect(self.since_edit.setEnabled)
+        layout.addRow("", self.since_check)
+        layout.addRow("Desde:", self.since_edit)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Ok).setText("Exportar")
+        buttons.accepted.connect(self._do_export)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def _browse(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "Pasta de destino")
+        if directory:
+            self.dir_edit.setText(directory)
+
+    def maintenance_since(self) -> date | None:
+        if not self.since_check.isChecked():
+            return None
+        qdate = self.since_edit.date()
+        return date(qdate.year(), qdate.month(), qdate.day())
+
+    def _do_export(self) -> None:
+        directory = self.dir_edit.text().strip()
+        if not directory:
+            QMessageBox.warning(self, "Exportação", "Escolha a pasta de destino.")
+            return
+        try:
+            self.exported_files = self.exports.export_csv(
+                directory, maintenance_since=self.maintenance_since()
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Exportação", str(exc))
+            return
+        message = f"{len(self.exported_files)} ficheiros CSV exportados."
+        if self.exports.sharepoint_enabled():
+            answer = QMessageBox.question(
+                self, "SharePoint",
+                message + "\n\nPublicar também no SharePoint?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer == QMessageBox.Yes:
+                try:
+                    self.exports.upload_to_sharepoint(self.exported_files)
+                    message += "\nPublicados no SharePoint."
+                except Exception as exc:
+                    QMessageBox.warning(self, "SharePoint", str(exc))
+        QMessageBox.information(self, "Exportação", message)
+        self.accept()
 
 
 class AdminPasswordDialog(QDialog):

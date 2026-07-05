@@ -24,9 +24,14 @@ from ..controllers.auth_controller import AuthController
 from ..session import UserSession
 from .dialogs import (
     AdminPasswordDialog,
+    DeviceDialog,
+    LinkDialog,
+    LinkEditDialog,
     LocationDialog,
+    MaintenanceDialog,
     TemplateDialog,
     UserDialog,
+    VlanDialog,
     confirm_force_delete,
     show_orphan_alert,
 )
@@ -69,6 +74,8 @@ class CrudTab(QWidget):
         for button in (self.new_button, self.edit_button, self.delete_button):
             buttons.addWidget(button)
         buttons.addStretch()
+        # Exposto para os separadores concretos acrescentarem botões próprios.
+        self.buttons_layout = buttons
         layout.addLayout(buttons)
 
         # RBAC: Manutenção é só leitura.
@@ -233,6 +240,230 @@ class TemplatesTab(CrudTab):
     def edit_flow(self, entity_id: int) -> bool:
         dialog = TemplateDialog(self.controller.get_form(entity_id))
         if dialog.exec() != TemplateDialog.Accepted:
+            return False
+        self.controller.update(entity_id, dialog.form())
+        return True
+
+    def delete_entity(self, entity_id: int, force: bool) -> list[str]:
+        return self.controller.delete(entity_id, force=force)
+
+
+class LinksTab(CrudTab):
+    """CRUD de ligações: criar (só portas livres), editar estado/notas, eliminar."""
+
+    columns = ["Equipamento A", "Porta A", "Equipamento B", "Porta B",
+               "Tipo", "Estado", "Notas"]
+    entity_label = "ligação"
+
+    def __init__(self, controller, session, auth, on_change=None, parent=None):
+        self.controller = controller
+        super().__init__(session, auth, on_change, parent)
+
+    def load_rows(self):
+        return [
+            (
+                row.id,
+                [row.device_a, row.port_a, row.device_b, row.port_b,
+                 row.link_type, row.status, row.notes],
+            )
+            for row in self.controller.list_rows()
+        ]
+
+    def create_flow(self) -> bool:
+        devices, free_ports = self.controller.form_data()
+        if len(devices) < 2:
+            QMessageBox.information(
+                self, "Sem portas livres",
+                "São precisos pelo menos dois equipamentos com portas livres.",
+            )
+            return False
+        dialog = LinkDialog(devices, free_ports, self)
+        if dialog.exec() != LinkDialog.Accepted:
+            return False
+        port_a, port_b, down = dialog.selected()
+        if port_a is None or port_b is None:
+            return False
+        self.controller.create(port_a, port_b, down=down)
+        return True
+
+    def edit_flow(self, entity_id: int) -> bool:
+        row = next(r for r in self.controller.list_rows() if r.id == entity_id)
+        dialog = LinkEditDialog(
+            f"{row.device_a}:{row.port_a}  ↔  {row.device_b}:{row.port_b}",
+            down=row.status == "down",
+            notes=row.notes,
+            parent=self,
+        )
+        if dialog.exec() != LinkEditDialog.Accepted:
+            return False
+        down, notes = dialog.values()
+        self.controller.set_status(entity_id, down=down, notes=notes)
+        return True
+
+    def delete_entity(self, entity_id: int, force: bool) -> list[str]:
+        return self.controller.delete(entity_id, force=force)
+
+
+class VlansTab(CrudTab):
+    """Catálogo de VLANs; a eliminação é bloqueada enquanto estiver em uso."""
+
+    columns = ["VLAN ID", "Nome", "Descrição", "Em uso por"]
+    entity_label = "VLAN"
+
+    def __init__(self, controller, session, auth, on_change=None, parent=None):
+        self.controller = controller
+        super().__init__(session, auth, on_change, parent)
+
+    def load_rows(self):
+        return [
+            (
+                row.id,
+                [row.vlan_id, row.name, row.description,
+                 f"{row.usage_count} registo(s)" if row.usage_count else "—"],
+            )
+            for row in self.controller.list_rows()
+        ]
+
+    def create_flow(self) -> bool:
+        dialog = VlanDialog(parent=self)
+        if dialog.exec() != VlanDialog.Accepted:
+            return False
+        self.controller.create(dialog.form())
+        return True
+
+    def edit_flow(self, entity_id: int) -> bool:
+        dialog = VlanDialog(self.controller.get_form(entity_id), parent=self)
+        if dialog.exec() != VlanDialog.Accepted:
+            return False
+        self.controller.update(entity_id, dialog.form())
+        return True
+
+    def delete_entity(self, entity_id: int, force: bool) -> list[str]:
+        return self.controller.delete(entity_id, force=force)
+
+
+class FirewallsTab(CrudTab):
+    """Janela dedicada às firewalls (categoria trancada; gestão de portas WAN)."""
+
+    columns = ["Hostname", "Localização", "IP de gestão", "Estado", "Portas WAN"]
+    entity_label = "firewall"
+
+    def __init__(
+        self,
+        devices_controller,
+        ports_controller,
+        vlans_controller,
+        session,
+        auth,
+        on_change=None,
+        parent=None,
+    ):
+        self.devices = devices_controller
+        self.ports = ports_controller
+        self.vlans = vlans_controller
+        super().__init__(session, auth, on_change, parent)
+        self.ports_button = QPushButton("Portas…")
+        self.ports_button.clicked.connect(self._ports_clicked)
+        self.ports_button.setEnabled(session.can(Permission.VIEW))
+        self.buttons_layout.insertWidget(3, self.ports_button)
+
+    def load_rows(self):
+        return [
+            (
+                row.id,
+                [row.hostname, row.location, row.ip_mgmt, row.status,
+                 row.wan_ports or "—"],
+            )
+            for row in self.devices.list_firewalls()
+        ]
+
+    def create_flow(self) -> bool:
+        dialog = DeviceDialog(
+            self.devices.template_options(),
+            self.devices.location_options(),
+            vlan_options=self.vlans.labels(),
+            fixed_category="firewall",
+            parent=self,
+        )
+        if dialog.exec() != DeviceDialog.Accepted:
+            return False
+        self.devices.create(dialog.form())
+        return True
+
+    def edit_flow(self, entity_id: int) -> bool:
+        dialog = DeviceDialog(
+            self.devices.template_options(),
+            self.devices.location_options(),
+            self.devices.get_form(entity_id),
+            vlan_options=self.vlans.labels(),
+            fixed_category="firewall",
+            parent=self,
+        )
+        if dialog.exec() != DeviceDialog.Accepted:
+            return False
+        self.devices.update(entity_id, dialog.form())
+        return True
+
+    def delete_entity(self, entity_id: int, force: bool) -> list[str]:
+        return self.devices.delete(entity_id, force=force)
+
+    def _ports_clicked(self) -> None:
+        entity_id = self.selected_id()
+        if entity_id is None:
+            return
+        from .ports_dialog import PortsDialog
+
+        row = self.table.currentRow()
+        hostname = self.table.item(row, 0).text()
+        dialog = PortsDialog(
+            self.ports, entity_id, hostname, self.session,
+            vlan_options=self.vlans.labels(), parent=self,
+        )
+        dialog.exec()
+        if dialog.changed:
+            self._changed()
+
+
+class MaintenancesTab(CrudTab):
+    """CRUD de manutenções com datas (realizadas e agendadas)."""
+
+    columns = ["Equipamento", "Data", "Estado", "Técnico", "Próxima", "Descrição"]
+    entity_label = "registo de manutenção"
+
+    def __init__(self, controller, session, auth, on_change=None, parent=None):
+        self.controller = controller
+        super().__init__(session, auth, on_change, parent)
+
+    def load_rows(self):
+        return [
+            (
+                row.id,
+                [row.hostname, row.date, row.status, row.technician,
+                 row.next_due or "—", row.description],
+            )
+            for row in self.controller.list_rows()
+        ]
+
+    def create_flow(self) -> bool:
+        devices = self.controller.device_options()
+        if not devices:
+            QMessageBox.information(
+                self, "Manutenções", "Crie primeiro um equipamento."
+            )
+            return False
+        dialog = MaintenanceDialog(devices, parent=self)
+        if dialog.exec() != MaintenanceDialog.Accepted:
+            return False
+        self.controller.create(dialog.form())
+        return True
+
+    def edit_flow(self, entity_id: int) -> bool:
+        dialog = MaintenanceDialog(
+            self.controller.device_options(),
+            self.controller.get_form(entity_id),
+            parent=self,
+        )
+        if dialog.exec() != MaintenanceDialog.Accepted:
             return False
         self.controller.update(entity_id, dialog.form())
         return True

@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from ...security.rbac import Permission
 from ...services.export_service import ExportService
 from .base import BaseController
 
 
 class ExportController(BaseController):
-    def export_csv(self, out_dir: str | None = None) -> list[str]:
+    def export_csv(
+        self,
+        out_dir: str | None = None,
+        maintenance_since: date | None = None,
+    ) -> list[str]:
         self._require(Permission.EXPORT)
-        return ExportService(self.ctx).export_all(out_dir)
+        return ExportService(self.ctx).export_all(
+            out_dir, maintenance_since=maintenance_since
+        )
 
     def sharepoint_enabled(self) -> bool:
         return self.ctx.config.sharepoint.enabled

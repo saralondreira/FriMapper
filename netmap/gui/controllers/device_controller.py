@@ -7,20 +7,23 @@ from sqlalchemy import select
 from ...db.models import Device, DeviceTemplate, Location
 from ...domain.enums import DeviceCategory, DeviceStatus
 from ...repositories.repositories import DeviceRepository, TemplateRepository
-from ...security.rbac import Permission
+from ...security.rbac import Permission, mask_value
 from ...services.integrity_service import IntegrityService
 from ...services.synthesis_service import SynthesisService
-from ..dto import DeviceForm, DeviceRow, Option, PortView, SynthesisView
+from ..dto import DeviceForm, DeviceRow, FirewallRow, Option, PortView, SynthesisView
 from .base import BaseController
 
 
 class DeviceController(BaseController):
     # ------------------------------------------------------------ leitura
-    def list_devices(self) -> list[DeviceRow]:
+    def list_devices(self, category: str | None = None) -> list[DeviceRow]:
         self._require(Permission.VIEW)
         with self.ctx.db.session() as s:
+            stmt = select(Device).order_by(Device.hostname)
+            if category is not None:
+                stmt = stmt.where(Device.category == DeviceCategory(category))
             rows = []
-            for d in s.scalars(select(Device).order_by(Device.hostname)):
+            for d in s.scalars(stmt):
                 rows.append(
                     DeviceRow(
                         id=d.id,
@@ -33,6 +36,29 @@ class DeviceController(BaseController):
                         assigned_user=d.assigned_user or "",
                         status=d.status.value,
                         needs_relink=d.needs_relink,
+                    )
+                )
+            return rows
+
+    def list_firewalls(self) -> list[FirewallRow]:
+        """Vista dedicada às firewalls (IP mascarado conforme o perfil)."""
+        self._require(Permission.VIEW)
+        with self.ctx.db.session() as s:
+            rows = []
+            for d in s.scalars(
+                select(Device)
+                .where(Device.category == DeviceCategory.FIREWALL)
+                .order_by(Device.hostname)
+            ):
+                rows.append(
+                    FirewallRow(
+                        id=d.id,
+                        hostname=d.hostname,
+                        location=d.location.name if d.location else "",
+                        ip_mgmt=mask_value(self.user.role, "ip_mgmt", d.ip_mgmt or "")
+                        or "",
+                        status=d.status.value,
+                        wan_ports=sum(1 for p in d.ports if p.is_uplink),
                     )
                 )
             return rows
