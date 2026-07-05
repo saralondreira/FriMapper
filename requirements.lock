@@ -1,5 +1,5 @@
-# Lock de versões — conjunto exato com que o Frimapper 0.1.0 foi validado
-# (smoke 35/35, GUI 12/12, interação QTest 8/8, selftest do bundle OK).
+# Lock de versões — conjunto exato com que o Frimapper 0.2.0 foi validado
+# (smoke 40/40, GUI 16/16, interação QTest 10/10, selftest do bundle OK).
 # Instalação reprodutível:  pip install -r requirements.lock
 # Runtime
 PySide6==6.11.1

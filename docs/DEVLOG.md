@@ -5,7 +5,7 @@
 > implementadas**. Deve ser atualizado a cada iteração. Destina-se também a ser
 > publicado no **SharePoint da empresa** (ver secção *Publicação no SharePoint*).
 
-Última atualização: **2026-07-04**
+Última atualização: **2026-07-05**
 
 ---
 
@@ -54,6 +54,10 @@ ORM nem BD — só DTOs (`gui/dto.py`).
 - **Roadmap (1ª iteração pós-manual):** ✅ Testes de interação `QTest`
   (8 checks, #016); *upload session* SharePoint >4 MB (#017); lock de versões
   `requirements.lock` (#018).
+- **v0.2.0 — Janelas CRUD dedicadas:** ✅ Portas (#021), Ligações (listar/
+  editar estado/eliminar), catálogo de VLANs (#019), Firewalls (categoria
+  trancada + portas WAN), Manutenções com datas (#020) e janela de exportação
+  com data e filtro. Testes: 40/16/10.
 
 ## 4. Registo de Problemas Encontrados e Soluções
 
@@ -220,6 +224,42 @@ ORM nem BD — só DTOs (`gui/dto.py`).
   release devem usar `pip install -r requirements.lock`. Ajustado o mínimo de
   `cryptography` para refletir a versão realmente validada (41.x).
 
+### 2026-07-05 · #019 — Catálogo de VLANs sem partir bases existentes
+- **Requisito:** CRUD de VLANs; até aqui a VLAN era texto livre em
+  `Device.vlan`/`Port.vlan`, sem catálogo nem validação.
+- **Problema:** transformar a VLAN numa FK exigiria alterar as tabelas
+  `devices`/`ports` — o `create_all` do SQLAlchemy não adiciona colunas a
+  tabelas existentes, e ainda não há migrações Alembic.
+- **Solução:** tabela **aditiva** `vlans` (vlan_id único 1–4094, nome,
+  descrição). Os campos texto mantêm-se; os formulários passam a dropdown
+  editável alimentado pelo catálogo; a eliminação é bloqueada quando algum
+  equipamento/porta usa `str(vlan_id)` (force limpa o campo, auditado). A
+  migração para FK fica adiada para quando o Alembic entrar.
+
+### 2026-07-05 · #020 — Registos de manutenção com datas
+- **Requisito:** CRUD de manutenções com datas (realizadas e agendadas).
+- **Solução:** tabela `maintenance_records` (device_id, `date`, `next_due`
+  opcional, estado planned/done/cancelled, técnico, descrição), com cascade
+  ORM — o histórico morre com o equipamento e **não** bloqueia a eliminação
+  (ao contrário das portas ocupadas: histórico é registo, não dependência
+  física). GUI: separador Manutenções com `QDateEdit` de calendário e
+  agendamento da próxima intervenção. Export inclui `manutencoes.csv`.
+
+### 2026-07-05 · #021 — Janelas CRUD dedicadas e exportação com data
+- **Requisito:** janelas próprias para portas, ligações, VLANs, firewalls e
+  manutenções, e janela de exportação com data.
+- **Solução:** (1) `PortsDialog` por equipamento (botão "Portas…" em
+  Equipamentos/Firewalls; porta com ligação não é eliminável aí — remove-se a
+  ligação primeiro, mantendo a integridade estrita); (2) separador
+  **Ligações** com listar/criar/editar estado (up/down refletido nas portas
+  via `LinkRepository.set_status`)/eliminar (liberta as portas);
+  (3) separador **Firewalls** — vista dedicada com categoria trancada no
+  formulário, IP mascarado por perfil e contagem de portas WAN (`is_uplink`);
+  (4) **ExportDialog** mostra a data/hora estampada na pasta
+  `export_<timestamp>/` e filtra `manutencoes.csv` a partir de uma data.
+  O `CrudTab` ganhou `buttons_layout` para os separadores acrescentarem
+  botões próprios. Versão 0.2.0; testes 40/16/10 todos verdes.
+
 ### (modelo para a próxima entrada)
 ### AAAA-MM-DD · #00N — Título curto
 - **Problema:** …
@@ -270,7 +310,8 @@ Requer app registada no Entra ID com permissão de aplicação
 - ~~Separador de gestão de utilizadores (criar contas, atribuir perfis) — Master.~~ ✅
 - ~~Confirmação de force-delete com password de admin na GUI.~~ ✅
 - ~~Biblioteca de ícones `Custom` (PLC, CCTV, régua, EV, solar, VoIP…).~~ ✅
-- ~~Empacotamento PyInstaller + Graphviz~~ ✅ · migração de schema (Alembic) pendente.
+- ~~Empacotamento PyInstaller + Graphviz~~ ✅ · migração de schema (Alembic)
+  pendente — **prioridade subiu**: a VLAN-como-FK (#019) depende disto.
 - Cobertura QTest de fluxos modais (force-delete de ponta a ponta na GUI).
 - Validação do conector SharePoint (incl. upload session) num tenant real.
 - Ícones definitivos (substituir os badges gerados).

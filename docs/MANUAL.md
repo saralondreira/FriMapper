@@ -8,7 +8,7 @@
 |---|---|
 | **Produto** | Frimapper — Gestor de Inventário de Rede & Gerador de Topologias |
 | **Pacote Python** | `netmap` |
-| **Versão** | 0.1.0 |
+| **Versão** | 0.2.0 |
 | **Plataformas** | Windows / Linux (desktop) |
 | **Ponto de entrada** | `main.py` |
 
@@ -106,7 +106,7 @@ netmap/
 │   ├── base.py           Database (engine, sessionmaker, PRAGMA FK), Base declarativa
 │   ├── types.py          EncryptedString (TypeDecorator Fernet)
 │   └── models.py         User, Location, DeviceTemplate, Device, Port, Link,
-│                         DeviceAttribute, SystemMeta
+│                         DeviceAttribute, Vlan, MaintenanceRecord, SystemMeta
 ├── security/
 │   ├── auth.py           hash_password/verify_password/needs_rehash (passlib argon2)
 │   ├── crypto.py         FieldCipher (Fernet; chave em ficheiro 0600)
@@ -127,9 +127,11 @@ netmap/
 └── gui/
     ├── dto.py            DeviceRow/Form, Option, Location*, Template*, User*, PortView…
     ├── session.py        UserSession (user_id, username, role)
-    ├── controllers/      auth, device, link, location, template, user, map, search, export
+    ├── controllers/      auth, device, link, port, vlan, maintenance, location,
+    │                     template, user, map, search, export
     ├── models/device_table_model.py  QAbstractTableModel (masking + destaque órfão)
-    └── views/            login_view, main_window, dialogs, tabs, node_synthesis_view
+    └── views/            login_view, main_window, dialogs, tabs, ports_dialog,
+                          node_synthesis_view
 assets/icons/*.png        12 ícones Custom (badges)
 tools/                    make_icons.py · seed_demo.py · build_windows.ps1
 tests/                    smoke_test.py · gui_smoke.py · gui_interaction.py
@@ -148,6 +150,7 @@ main.py                   entrypoint (+ --selftest)   ·   frimapper.spec
 - **PortStatus:** `up`, `down`, `unused`.
 - **LinkType:** `active`, `passive`.
 - **DeviceStatus:** `active`, `inactive`, `unknown`.
+- **MaintenanceStatus:** `planned`, `done`, `cancelled` (labels PT na GUI).
 
 ---
 
@@ -171,13 +174,20 @@ quase todas as tabelas. FK reforçadas no SQLite (`PRAGMA foreign_keys=ON`).
 `notes`.
 **device_attributes** — `id`, `device_id`→devices, `name`, `value`; único
 (`device_id`,`name`).
+**vlans** — `id`, `vlan_id`⧉ (1–4094), `name`, `description`. Catálogo
+**aditivo**: `Device.vlan`/`Port.vlan` continuam texto (compatibilidade até
+Alembic); os dropdowns são alimentados pelo catálogo e a eliminação valida a
+utilização por correspondência exata com `str(vlan_id)`.
+**maintenance_records** — `id`, `device_id`→devices, `date`, `next_due`,
+`status`, `technician`, `description`. Histórico morre com o equipamento
+(cascade ORM); não bloqueia a eliminação.
 **system_meta** — `key`(PK), `value`. Chaves usadas: `db_last_modified`,
 `map_last_generated`, `map_last_path`.
 
 Legenda: ⧉ único · 🔒 cifrado em repouso (Fernet).
 
-Relações com cascata ORM: `Device.ports`, `Device.attributes` →
-`cascade="all, delete-orphan"` (usadas apenas no force-delete).
+Relações com cascata ORM: `Device.ports`, `Device.attributes`,
+`Device.maintenances` → `cascade="all, delete-orphan"`.
 
 ---
 
@@ -192,6 +202,7 @@ Definidas em cada repositório (`dependencies()` + `_cascade()`), aplicadas por
 | DeviceTemplate | equipamentos que usam o modelo | desassocia (`template_id=None`) |
 | Device | portas ocupadas (com link) | remove links; ports caem por ORM |
 | Port | tem link | remove o link |
+| Vlan | equipamentos/portas com o campo VLAN = `str(vlan_id)` | limpa o campo nesses registos |
 | User | é o único Master ativo | — (nunca permitido) |
 
 Sem `force`, `delete()` levanta **`DependencyError`** com a lista de dependências.
@@ -254,7 +265,11 @@ está atrás de `EDIT` (Manutenção não acede).
   `_cascade`.
 - `PortRepository`: `dependencies`, `_cascade`.
 - `LinkRepository`: `create(port_a, port_b, **kw)` — valida portas livres, define
-  o estado das portas e **limpa `needs_relink`** de ambos os equipamentos.
+  o estado das portas e **limpa `needs_relink`** de ambos os equipamentos;
+  `set_status(link, status)` reflete up/down nas portas; `delete` liberta-as.
+- `VlanRepository`: `by_vlan_id`, `dependencies` (uso por equipamentos/portas),
+  `_cascade` (limpa o campo VLAN nos utilizadores).
+- `MaintenanceRepository`: `for_device`, auditoria com hostname+data.
 
 ---
 
@@ -269,7 +284,8 @@ está atrás de `EDIT` (Manutenção não acede).
 - **map_service** — `is_stale()`, `last_map_path()`, `generate(view, location_id)`;
   `ICON_FILES`, `NATIVE_FALLBACK`, `_edge_style`, `_devices_for_view`.
 - **search_service** — `search(term) -> list[SearchResult]`.
-- **export_service** — `export_all(dir) -> list[str]` (6 CSV).
+- **export_service** — `export_all(dir, maintenance_since=None) -> list[str]`
+  (8 CSV; filtro opcional de data nas manutenções).
 - **user_service** — `list_users`, `create_user`, `set_password`, `set_role`,
   `set_active`, `delete_user`, `verify_admin`.
 
@@ -281,13 +297,21 @@ Cada controller recebe `(ctx, session)` (exceto Auth/Map/Search/Export que só
 precisam de `ctx`) e devolve **DTOs**.
 
 - **AuthController** — `login(u,p) -> UserSession|None`, `verify_admin(u,p) -> bool`.
-- **DeviceController** — `list_devices()->[DeviceRow]`, `orphan_hostnames()`,
+- **DeviceController** — `list_devices(category=None)->[DeviceRow]`,
+  `list_firewalls()->[FirewallRow]`, `orphan_hostnames()`,
   `template_options()`, `location_options()`, `get_form(id)->DeviceForm`,
   `create(form)`, `update(id,form)`, `delete(id,force)->[str]`,
   `get_attributes(id)->[(str,str)]`, `save_attributes(id,pairs)`,
   `synthesis(id)->SynthesisView`.
 - **LinkController** — `form_data()->([Option],{id:[Option]})`,
-  `create(a,b,down)`.
+  `create(a,b,down)`, `list_rows()->[LinkRow]`, `set_status(id,down,notes)`,
+  `delete(id)`.
+- **PortController** — `list_rows(device_id)->[PortRow]`, `get_form`, `create`,
+  `update`, `delete` (bloqueada com ligação).
+- **VlanController** — `list_rows()->[VlanRow]`, `labels()->[str]`, `get_form`,
+  `create`, `update`, `delete(id,force)` (valida 1–4094 e unicidade).
+- **MaintenanceController** — `list_rows(device_id=None)->[MaintenanceRow]`,
+  `device_options()`, `get_form`, `create`, `update`, `delete` (datas ISO).
 - **LocationController** — `list_rows`, `options(exclude_id)`, `get_form`,
   `create`, `update`, `delete(id,force)->[str]`.
 - **TemplateController / UserController** — `list_rows`, `get_form`, `create`,
@@ -303,14 +327,21 @@ precisam de `ctx`) e devolve **DTOs**.
 
 - **LoginView** — autenticação (AuthController).
 - **MainWindow** — barra de pesquisa; banners de **staleness** (vermelho) e
-  **órfãos** (laranja); separadores: Equipamentos, Localizações, Templates, Mapa,
-  Utilizadores (só Master). Botões dos Equipamentos: Adicionar, Editar, Eliminar,
-  **Ligar…**, **Campos…**, Exportar CSV. Duplo-clique → síntese.
-- **Diálogos** (`dialogs.py`) — `DeviceDialog`, `LocationDialog`, `TemplateDialog`,
-  `UserDialog`, `LinkDialog` (só portas livres), `DeviceAttributesDialog`,
-  `AdminPasswordDialog`, `confirm_force_delete()`.
+  **órfãos** (laranja); separadores: Equipamentos, **Ligações**, **VLANs**,
+  **Firewalls**, **Manutenções**, Localizações, Templates, Mapa, Utilizadores
+  (só Master). Botões dos Equipamentos: Adicionar, Editar, Eliminar, **Ligar…**,
+  **Portas…**, **Campos…**, Exportar CSV. Duplo-clique → síntese.
+- **Diálogos** (`dialogs.py`) — `DeviceDialog` (VLAN por dropdown do catálogo;
+  categoria trancável p/ firewalls), `LocationDialog`, `TemplateDialog`,
+  `UserDialog`, `LinkDialog` (só portas livres), `LinkEditDialog` (up/down,
+  notas), `VlanDialog`, `MaintenanceDialog` (datas com calendário),
+  `PortDialog`, `ExportDialog` (data visível + filtro de manutenções),
+  `DeviceAttributesDialog`, `AdminPasswordDialog`, `confirm_force_delete()`.
+- **PortsDialog** (`ports_dialog.py`) — CRUD de portas de um equipamento
+  (portas com ligação não são elimináveis aí).
 - **CrudTab** (`tabs.py`) — base genérica (tabela + Novo/Editar/Eliminar, RBAC,
-  fluxo de force-delete + alerta de órfãos, callback `on_change`).
+  fluxo de force-delete + alerta de órfãos, callback `on_change`); concretos:
+  Links/Vlans/Firewalls/Maintenances/Locations/Templates/Users.
 - **DeviceTableModel** — masking por sessão + fundo laranja nas linhas órfãs.
 - **NodeSynthesisView** — tabela de portas com estado a cores.
 
@@ -369,10 +400,13 @@ device_ids_in_location(id)` (recursivo). Criar uma nova ligação limpa o flag
 
 ## 18. Exportação CSV (`services/export_service.py`)
 
-`export_all(dir)` cria a pasta `export_<timestamp>/` com 6 ficheiros:
-`localizacoes.csv`, `templates.csv`, `equipamentos.csv`, `portas.csv`,
-`ligacoes.csv`, `campos_dinamicos.csv`. Codificação `utf-8-sig` (Excel).
-**Campos cifrados nunca saem em claro** → `[protegido]`.
+`export_all(dir, maintenance_since=None)` cria a pasta `export_<timestamp>/`
+com 8 ficheiros: `localizacoes.csv`, `templates.csv`, `equipamentos.csv`,
+`portas.csv`, `ligacoes.csv`, `campos_dinamicos.csv`, `vlans.csv`,
+`manutencoes.csv`. Codificação `utf-8-sig` (Excel). **Campos cifrados nunca
+saem em claro** → `[protegido]`. A GUI expõe isto na **janela de exportação**
+(`ExportDialog`): mostra a data/hora estampada no nome da pasta e permite
+filtrar as manutenções a partir de uma data.
 
 ---
 
@@ -412,9 +446,9 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt        # dev (gamas) · release: -r requirements.lock
 python main.py
 python main.py --selftest                               # valida núcleo sem GUI
-python tests/smoke_test.py                              # 35 verificações
-QT_QPA_PLATFORM=offscreen python tests/gui_smoke.py     # 12 verificações
-QT_QPA_PLATFORM=offscreen python tests/gui_interaction.py  # 8 verificações (QTest)
+python tests/smoke_test.py                              # 40 verificações
+QT_QPA_PLATFORM=offscreen python tests/gui_smoke.py     # 16 verificações
+QT_QPA_PLATFORM=offscreen python tests/gui_interaction.py  # 10 verificações (QTest)
 python tools/seed_demo.py demo                          # dados + mapas (requer Graphviz)
 ```
 
@@ -452,15 +486,17 @@ Windows: `tools/build_windows.ps1`.
 
 ## 24. Testes
 
-- **`tests/smoke_test.py`** (35): bootstrap, hashing, cifra em repouso, herança
+- **`tests/smoke_test.py`** (40): bootstrap, hashing, cifra em repouso, herança
   de portas, ocupação, dependências/force-delete, órfãos, campos dinâmicos,
-  pesquisa, export (não-vazamento), utilizadores/verify_admin, staleness.
-- **`tests/gui_smoke.py`** (12, offscreen): construção de janela/diálogos para os
-  3 perfis, RBAC, masking, síntese, ligações, campos dinâmicos.
-- **`tests/gui_interaction.py`** (8, offscreen, `QtTest`): cliques e teclado
+  VLANs (bloqueio/força), manutenções (datas, cascade), pesquisa, export
+  (não-vazamento, 8 CSV, filtro de data), utilizadores/verify_admin, staleness.
+- **`tests/gui_smoke.py`** (16, offscreen): construção de janela/diálogos para os
+  3 perfis, RBAC, masking, síntese, ligações, campos dinâmicos, separadores
+  VLANs/Ligações, PortsDialog, ExportDialog.
+- **`tests/gui_interaction.py`** (10, offscreen, `QtTest`): cliques e teclado
   simulados — login (sucesso/falha), formulário de equipamento, recarga de
   portas livres, botões dos campos dinâmicos, seleção de linhas, seletor de
-  vista do mapa.
+  vista do mapa, filtro de data da exportação, formulário de VLAN.
 - **`main.py --selftest`**: valida o bundle empacotado.
 - **Limitação:** fluxos **modais** (`exec()`) não são exercitados em CI (sem
   event loop bloqueante) — cobri-los exigiria fecho temporizado por `QTimer`.
