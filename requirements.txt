@@ -1,0 +1,9 @@
+# Runtime — todas as licenças permitem uso empresarial interno
+# (LGPL apenas em ligação dinâmica: PySide6).
+PySide6>=6.6
+SQLAlchemy>=2.0
+passlib>=1.7.4
+argon2-cffi>=23.1
+bcrypt>=4.0,<4.1
+cryptography>=41.0
+diagrams>=0.23
