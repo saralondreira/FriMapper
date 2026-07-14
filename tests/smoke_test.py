@@ -18,22 +18,22 @@ os.environ["FRIMAPPER_DATA"] = _tmp.name
 
 from sqlalchemy import text  # noqa: E402
 
-from netmap.config import AppConfig  # noqa: E402
-from netmap.db.models import (  # noqa: E402
+from frimapper.config import AppConfig  # noqa: E402
+from frimapper.db.models import (  # noqa: E402
     DeviceTemplate,
     Location,
     MaintenanceRecord,
     Vlan,
 )
-from netmap.domain.enums import (  # noqa: E402
+from frimapper.domain.enums import (  # noqa: E402
     DeviceCategory,
     MaintenanceStatus,
     PortStatus,
     Role,
 )
-from netmap.repositories.base import DependencyError  # noqa: E402
-from netmap.repositories.meta import set_meta  # noqa: E402
-from netmap.repositories.repositories import (  # noqa: E402
+from frimapper.repositories.base import DependencyError  # noqa: E402
+from frimapper.repositories.meta import set_meta  # noqa: E402
+from frimapper.repositories.repositories import (  # noqa: E402
     DeviceRepository,
     LinkRepository,
     LocationRepository,
@@ -41,20 +41,20 @@ from netmap.repositories.repositories import (  # noqa: E402
     TemplateRepository,
     VlanRepository,
 )
-from netmap.security.auth import hash_password, verify_password  # noqa: E402
-from netmap.security.rbac import (  # noqa: E402
+from frimapper.security.auth import hash_password, verify_password  # noqa: E402
+from frimapper.security.rbac import (  # noqa: E402
     MASK,
     Permission,
     has_permission,
     mask_value,
 )
-from netmap.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
-from netmap.services.export_service import ExportService  # noqa: E402
-from netmap.services.integrity_service import IntegrityService  # noqa: E402
-from netmap.services.map_service import MapService  # noqa: E402
-from netmap.services.search_service import SearchService  # noqa: E402
-from netmap.services.synthesis_service import SynthesisService  # noqa: E402
-from netmap.services.user_service import UserService  # noqa: E402
+from frimapper.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
+from frimapper.services.export_service import ExportService  # noqa: E402
+from frimapper.services.integrity_service import IntegrityService  # noqa: E402
+from frimapper.services.map_service import MapService  # noqa: E402
+from frimapper.services.search_service import SearchService  # noqa: E402
+from frimapper.services.synthesis_service import SynthesisService  # noqa: E402
+from frimapper.services.user_service import UserService  # noqa: E402
 
 PASSED = 0
 FAILED = 0

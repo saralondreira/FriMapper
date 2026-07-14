@@ -5,7 +5,7 @@ Import tardio: ``msal`` e ``requests`` são dependências OPCIONAIS, não de
 runtime — a aplicação funciona sem elas.
 
 Segurança (ver DEVLOG #008):
-- O ``client_secret`` vem SEMPRE da env var ``NETMAP_SP_CLIENT_SECRET``,
+- O ``client_secret`` vem SEMPRE da env var ``FRIMAPPER_SP_CLIENT_SECRET``,
   nunca de ficheiro versionado ou de configuração em disco.
 - A chave Fernet (``secret.key``) NUNCA deve ser publicada no SharePoint —
   o backup normal é o CSV, onde as credenciais já saem como ``[protegido]``.
@@ -44,10 +44,10 @@ class SharePointClient:
         for field in ("tenant_id", "client_id", "site", "folder"):
             if not getattr(config, field):
                 raise SharePointError(f"[sharepoint] {field} não configurado.")
-        secret = os.environ.get("NETMAP_SP_CLIENT_SECRET")
+        secret = os.environ.get("FRIMAPPER_SP_CLIENT_SECRET")
         if not secret:
             raise SharePointError(
-                "Env var NETMAP_SP_CLIENT_SECRET não definida "
+                "Env var FRIMAPPER_SP_CLIENT_SECRET não definida "
                 "(o client_secret nunca vive em ficheiros)."
             )
         try:

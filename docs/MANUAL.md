@@ -7,8 +7,8 @@
 | | |
 |---|---|
 | **Produto** | Frimapper — Gestor de Inventário de Rede & Gerador de Topologias |
-| **Pacote Python** | `netmap` |
-| **Versão** | 0.2.0 |
+| **Pacote Python** | `frimapper` |
+| **Versão** | 0.3.0 |
 | **Plataformas** | Windows / Linux (desktop) |
 | **Ponto de entrada** | `main.py` |
 
@@ -96,7 +96,7 @@ Invariantes:
 ## 4. Estrutura de ficheiros (anotada)
 
 ```
-netmap/
+frimapper/
 ├── __init__.py           APP_NAME = "Frimapper", __version__
 ├── config.py             AppConfig.load(): connection string + caminhos + [sharepoint]
 ├── paths.py              resource_dir()/data_dir() (empacotamento)
@@ -413,7 +413,7 @@ filtrar as manutenções a partir de uma data.
 ## 19. Integração SharePoint (opcional)
 
 `integrations/sharepoint.py` (Microsoft Graph, client-credentials). Desligado por
-defeito. `client_secret` via env `NETMAP_SP_CLIENT_SECRET`. Requer app no Entra
+defeito. `client_secret` via env `FRIMAPPER_SP_CLIENT_SECRET`. Requer app no Entra
 ID com `Sites.ReadWrite.All`; libs opcionais `msal`+`requests`. Ficheiros > 4 MB
 usam **upload session** (chunks múltiplos de 320 KiB — por validar em tenant
 real). Import tardio — não é dependência de runtime.
@@ -426,8 +426,8 @@ real). Import tardio — não é dependência de runtime.
 audit_log/secret_key/map_output/icon_dir/graphviz_dot_path`, `[sharepoint]
 enabled/tenant_id/client_id/site/folder`.
 
-**Env vars:** `NETMAP_DATABASE_URL` (connection string),
-`NETMAP_SP_CLIENT_SECRET` (segredo SharePoint), `FRIMAPPER_DATA` (dir de dados).
+**Env vars:** `FRIMAPPER_DATABASE_URL` (connection string),
+`FRIMAPPER_SP_CLIENT_SECRET` (segredo SharePoint), `FRIMAPPER_DATA` (dir de dados).
 
 **Caminhos (`paths.py`):** recursos read-only em `resource_dir()`
 (`sys._MEIPASS` quando empacotado); dados graváveis em `data_dir()`

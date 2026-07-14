@@ -21,29 +21,29 @@ os.environ["FRIMAPPER_DATA"] = _tmp.name
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from netmap.config import AppConfig  # noqa: E402
-from netmap.db.models import DeviceTemplate, Location  # noqa: E402
-from netmap.domain.enums import DeviceCategory, Role  # noqa: E402
-from netmap.repositories.repositories import (  # noqa: E402
+from frimapper.config import AppConfig  # noqa: E402
+from frimapper.db.models import DeviceTemplate, Location  # noqa: E402
+from frimapper.domain.enums import DeviceCategory, Role  # noqa: E402
+from frimapper.repositories.repositories import (  # noqa: E402
     DeviceRepository,
     LinkRepository,
     LocationRepository,
     TemplateRepository,
 )
-from netmap.security.rbac import MASK  # noqa: E402
-from netmap.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
-from netmap.services.user_service import UserService  # noqa: E402
-from netmap.gui.controllers.auth_controller import AuthController  # noqa: E402
-from netmap.gui.controllers.device_controller import DeviceController  # noqa: E402
-from netmap.gui.controllers.link_controller import LinkController  # noqa: E402
-from netmap.gui.views.dialogs import (  # noqa: E402
+from frimapper.security.rbac import MASK  # noqa: E402
+from frimapper.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
+from frimapper.services.user_service import UserService  # noqa: E402
+from frimapper.gui.controllers.auth_controller import AuthController  # noqa: E402
+from frimapper.gui.controllers.device_controller import DeviceController  # noqa: E402
+from frimapper.gui.controllers.link_controller import LinkController  # noqa: E402
+from frimapper.gui.views.dialogs import (  # noqa: E402
     DeviceAttributesDialog,
     DeviceDialog,
     LinkDialog,
 )
-from netmap.gui.views.login_view import LoginView  # noqa: E402
-from netmap.gui.views.main_window import MainWindow  # noqa: E402
-from netmap.gui.views.node_synthesis_view import NodeSynthesisView  # noqa: E402
+from frimapper.gui.views.login_view import LoginView  # noqa: E402
+from frimapper.gui.views.main_window import MainWindow  # noqa: E402
+from frimapper.gui.views.node_synthesis_view import NodeSynthesisView  # noqa: E402
 
 PASSED = 0
 FAILED = 0
@@ -181,8 +181,8 @@ check("NodeSynthesisView constrói a tabela de portas",
       synthesis_view.table.rowCount() == 8)
 
 # -------------------------------------- novos separadores e janelas CRUD
-from netmap.gui.controllers.vlan_controller import VlanController  # noqa: E402
-from netmap.gui.dto import VlanForm  # noqa: E402
+from frimapper.gui.controllers.vlan_controller import VlanController  # noqa: E402
+from frimapper.gui.dto import VlanForm  # noqa: E402
 
 vlan_ctl = VlanController(ctx, session_master)
 vlan_ctl.create(VlanForm(vlan_id=20, name="Escritório"))
@@ -201,8 +201,8 @@ check(
     and links_tab.table.item(0, 3).text() == "eth0",
 )
 
-from netmap.gui.controllers.port_controller import PortController  # noqa: E402
-from netmap.gui.views.ports_dialog import PortsDialog  # noqa: E402
+from frimapper.gui.controllers.port_controller import PortController  # noqa: E402
+from frimapper.gui.views.ports_dialog import PortsDialog  # noqa: E402
 
 ports_dialog = PortsDialog(
     PortController(ctx, session_master), sw_id, "SW-A1", session_master,
@@ -214,7 +214,7 @@ check(
     and ports_dialog.table.item(0, 5).text() == "PC-01:eth0",
 )
 
-from netmap.gui.views.dialogs import ExportDialog  # noqa: E402
+from frimapper.gui.views.dialogs import ExportDialog  # noqa: E402
 from datetime import datetime  # noqa: E402
 
 export_dialog = ExportDialog(window_master.exports)
@@ -227,7 +227,7 @@ check(
 # ------------------------------------------------------- banner de órfãos
 with ctx.db.session() as s:
     repo = DeviceRepository(s, ctx.audit)
-    from netmap.services.integrity_service import IntegrityService
+    from frimapper.services.integrity_service import IntegrityService
 
     integrity = IntegrityService(s)
     peers = integrity.link_peers({sw_id})

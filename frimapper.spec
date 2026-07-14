@@ -1,12 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 """Spec do PyInstaller (onedir) para o Frimapper.
 
-Separação recursos/dados (ver netmap/paths.py e DEVLOG #013): os recursos
+Separação recursos/dados (ver frimapper/paths.py e DEVLOG #013): os recursos
 (ícones, dados da diagrams, Graphviz) vão para o bundle read-only; a BD,
 chave, logs e mapas vivem em %APPDATA%/Frimapper ou ~/.frimapper.
 
 Graphviz: definir a env var GRAPHVIZ_HOME no build (pasta que contém bin/)
-para empacotar o `dot`; netmap/runtime.configure_graphviz coloca-o no PATH
+para empacotar o `dot`; frimapper/runtime.configure_graphviz coloca-o no PATH
 em runtime. Sem GRAPHVIZ_HOME, o executável usa o Graphviz do sistema.
 
 Build:  pyinstaller frimapper.spec

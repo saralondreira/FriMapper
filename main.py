@@ -26,17 +26,17 @@ def run_selftest() -> int:
     with tempfile.TemporaryDirectory(prefix="frimapper-selftest-") as tmp:
         os.environ["FRIMAPPER_DATA"] = tmp
 
-        from netmap.config import AppConfig
-        from netmap.db.models import DeviceTemplate
-        from netmap.domain.enums import DeviceCategory, Role
-        from netmap.repositories.repositories import (
+        from frimapper.config import AppConfig
+        from frimapper.db.models import DeviceTemplate
+        from frimapper.domain.enums import DeviceCategory, Role
+        from frimapper.repositories.repositories import (
             DeviceRepository,
             LinkRepository,
             TemplateRepository,
         )
-        from netmap.services.bootstrap import ensure_master_user, initialize_app
-        from netmap.services.search_service import SearchService
-        from netmap.services.user_service import UserService
+        from frimapper.services.bootstrap import ensure_master_user, initialize_app
+        from frimapper.services.search_service import SearchService
+        from frimapper.services.user_service import UserService
 
         ctx = initialize_app(AppConfig.load())
         check("bootstrap (BD + cifra + auditoria)", True)
@@ -74,7 +74,7 @@ def run_selftest() -> int:
 
         check("ícones empacotados", os.path.isdir(ctx.config.icon_dir))
         if shutil.which("dot"):
-            from netmap.services.map_service import MapService
+            from frimapper.services.map_service import MapService
 
             png = MapService(ctx).generate("full")
             check("geração de mapa PNG", os.path.isfile(png))
@@ -88,11 +88,11 @@ def run_selftest() -> int:
 def run_gui() -> int:
     from PySide6.QtWidgets import QApplication, QDialog
 
-    from netmap.config import AppConfig
-    from netmap.gui.controllers.auth_controller import AuthController
-    from netmap.gui.views.login_view import LoginView
-    from netmap.gui.views.main_window import MainWindow
-    from netmap.services.bootstrap import ensure_master_user, initialize_app
+    from frimapper.config import AppConfig
+    from frimapper.gui.controllers.auth_controller import AuthController
+    from frimapper.gui.views.login_view import LoginView
+    from frimapper.gui.views.main_window import MainWindow
+    from frimapper.services.bootstrap import ensure_master_user, initialize_app
 
     ctx = initialize_app(AppConfig.load())
     first_run = ensure_master_user(ctx)

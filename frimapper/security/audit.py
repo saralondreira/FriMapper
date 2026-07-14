@@ -22,7 +22,7 @@ class AuditLogger:
         self.current_user = "-"
         path = Path(log_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        self._logger = logging.getLogger(f"netmap.audit.{id(self)}")
+        self._logger = logging.getLogger(f"frimapper.audit.{id(self)}")
         self._logger.setLevel(logging.INFO)
         self._logger.propagate = False
         handler = RotatingFileHandler(

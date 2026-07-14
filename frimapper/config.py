@@ -5,8 +5,8 @@ PostgreSQL/MySQL/SQL Server sem tocar em mais nada acima da camada ``db/``
 (basta instalar o driver correspondente: psycopg / PyMySQL / pyodbc).
 
 Env vars suportadas:
-- ``NETMAP_DATABASE_URL``     — override da connection string
-- ``NETMAP_SP_CLIENT_SECRET`` — segredo do conector SharePoint (nunca em ficheiro)
+- ``FRIMAPPER_DATABASE_URL``     — override da connection string
+- ``FRIMAPPER_SP_CLIENT_SECRET`` — segredo do conector SharePoint (nunca em ficheiro)
 - ``FRIMAPPER_DATA``          — override da pasta de dados graváveis
 """
 
@@ -49,7 +49,7 @@ class AppConfig:
             parser.read(path, encoding="utf-8")
 
         default_db = f"sqlite:///{data / 'network_inventory.db'}"
-        database_url = os.environ.get("NETMAP_DATABASE_URL") or parser.get(
+        database_url = os.environ.get("FRIMAPPER_DATABASE_URL") or parser.get(
             "database", "url", fallback=default_db
         )
         echo = parser.getboolean("database", "echo", fallback=False)

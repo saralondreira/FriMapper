@@ -1,4 +1,4 @@
-# Lock de versões — conjunto exato com que o Frimapper 0.2.0 foi validado
+# Lock de versões — conjunto exato com que o Frimapper 0.3.0 foi validado
 # (smoke 40/40, GUI 16/16, interação QTest 10/10, selftest do bundle OK).
 # Instalação reprodutível:  pip install -r requirements.lock
 # Runtime

@@ -19,17 +19,17 @@ if len(sys.argv) < 2:
 
 os.environ["FRIMAPPER_DATA"] = sys.argv[1]
 
-from netmap.config import AppConfig  # noqa: E402
-from netmap.db.models import DeviceTemplate, Location  # noqa: E402
-from netmap.domain.enums import DeviceCategory, PortStatus  # noqa: E402
-from netmap.repositories.repositories import (  # noqa: E402
+from frimapper.config import AppConfig  # noqa: E402
+from frimapper.db.models import DeviceTemplate, Location  # noqa: E402
+from frimapper.domain.enums import DeviceCategory, PortStatus  # noqa: E402
+from frimapper.repositories.repositories import (  # noqa: E402
     DeviceRepository,
     LinkRepository,
     LocationRepository,
     TemplateRepository,
 )
-from netmap.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
-from netmap.services.map_service import MapService  # noqa: E402
+from frimapper.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
+from frimapper.services.map_service import MapService  # noqa: E402
 
 ctx = initialize_app(AppConfig.load())
 ensure_master_user(ctx)

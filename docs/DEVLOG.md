@@ -1,11 +1,11 @@
-# netmap — Registo de Projeto e Progresso (Documento Vivo)
+# Frimapper — Registo de Projeto e Progresso (Documento Vivo)
 
 > **Propósito.** Documento vivo do planeamento, decisões de arquitetura e,
 > sobretudo, do registo contínuo de **problemas encontrados e soluções
 > implementadas**. Deve ser atualizado a cada iteração. Destina-se também a ser
 > publicado no **SharePoint da empresa** (ver secção *Publicação no SharePoint*).
 
-Última atualização: **2026-07-05**
+Última atualização: **2026-07-14**
 
 ---
 
@@ -58,6 +58,8 @@ ORM nem BD — só DTOs (`gui/dto.py`).
   editar estado/eliminar), catálogo de VLANs (#019), Firewalls (categoria
   trancada + portas WAN), Manutenções com datas (#020) e janela de exportação
   com data e filtro. Testes: 40/16/10.
+- **v0.3.0 — Renomeação do pacote:** ✅ `netmap` → `frimapper` (#022), com as
+  env vars `NETMAP_*` → `FRIMAPPER_*`. Testes 40/16/10 e bundle revalidados.
 
 ## 4. Registo de Problemas Encontrados e Soluções
 
@@ -260,6 +262,24 @@ ORM nem BD — só DTOs (`gui/dto.py`).
   O `CrudTab` ganhou `buttons_layout` para os separadores acrescentarem
   botões próprios. Versão 0.2.0; testes 40/16/10 todos verdes.
 
+### 2026-07-14 · #022 — Renomeação do pacote: `netmap` → `frimapper`
+- **Contexto:** o pacote manteve o nome de trabalho `netmap` quando o produto
+  passou a chamar-se Frimapper (#011), para desacoplar o nome comercial (com
+  verificação de marca pendente) do identificador técnico.
+- **Decisão:** alinhar os dois nomes agora, enquanto não há instalações em
+  produção nem dependências externas do nome do pacote — mais tarde o custo
+  só aumentaria.
+- **Solução:** diretório e imports renomeados (`git mv` preserva o histórico);
+  env vars `NETMAP_DATABASE_URL`/`NETMAP_SP_CLIENT_SECRET` renomeadas para
+  `FRIMAPPER_DATABASE_URL`/`FRIMAPPER_SP_CLIENT_SECRET` (rutura limpa — não há
+  ambientes configurados com as antigas); logger de auditoria e docs correntes
+  atualizados. **As entradas históricas deste registo (#008, #011, #013)
+  mantêm os caminhos `netmap/` da época — não se reescreve o histórico.**
+- **Validação:** 40/16/10 verificações + selftest, e bundle PyInstaller
+  reconstruído e validado. Versão 0.3.0.
+- **Pendente (inalterado):** verificação formal de marca (EUIPO/INPI) e
+  reserva de domínio/PyPI para "frimapper".
+
 ### (modelo para a próxima entrada)
 ### AAAA-MM-DD · #00N — Título curto
 - **Problema:** …
@@ -284,7 +304,7 @@ conector para o SharePoint — a integração corre na máquina do administrador
 | `secret.key` (chave Fernet) | **FORA** do SharePoint | Cofre/gestor de segredos. Ver #008. |
 | Base de dados `.db` | Local / partilha controlada | Se cifrada, a chave nunca no mesmo sítio. |
 
-**Conector (opcional, desligado por defeito):** `netmap/integrations/sharepoint.py`
+**Conector (opcional, desligado por defeito):** `frimapper/integrations/sharepoint.py`
 usa Microsoft Graph (client credentials). Ativação em `config.ini`:
 
 ```ini
@@ -293,10 +313,10 @@ enabled   = true
 tenant_id = <tenant-guid>
 client_id = <app-guid>
 site      = contoso.sharepoint.com:/sites/Redes
-folder    = netmap/backups
+folder    = frimapper/backups
 ```
 
-O `client_secret` vem da env var `NETMAP_SP_CLIENT_SECRET` (nunca no ficheiro).
+O `client_secret` vem da env var `FRIMAPPER_SP_CLIENT_SECRET` (nunca no ficheiro).
 Requer app registada no Entra ID com permissão de aplicação
 `Sites.ReadWrite.All` (consentimento de administrador) e as libs opcionais
 `msal` + `requests`. Ficheiros > 4 MB precisam de *upload session* (TODO).

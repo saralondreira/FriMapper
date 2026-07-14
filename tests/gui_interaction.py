@@ -30,26 +30,26 @@ from PySide6.QtWidgets import (  # noqa: E402
     QPushButton,
 )
 
-from netmap.config import AppConfig  # noqa: E402
-from netmap.db.models import DeviceTemplate, Location  # noqa: E402
-from netmap.domain.enums import DeviceCategory  # noqa: E402
-from netmap.repositories.repositories import (  # noqa: E402
+from frimapper.config import AppConfig  # noqa: E402
+from frimapper.db.models import DeviceTemplate, Location  # noqa: E402
+from frimapper.domain.enums import DeviceCategory  # noqa: E402
+from frimapper.repositories.repositories import (  # noqa: E402
     DeviceRepository,
     LinkRepository,
     LocationRepository,
     TemplateRepository,
 )
-from netmap.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
-from netmap.gui.controllers.auth_controller import AuthController  # noqa: E402
-from netmap.gui.controllers.device_controller import DeviceController  # noqa: E402
-from netmap.gui.controllers.link_controller import LinkController  # noqa: E402
-from netmap.gui.views.dialogs import (  # noqa: E402
+from frimapper.services.bootstrap import ensure_master_user, initialize_app  # noqa: E402
+from frimapper.gui.controllers.auth_controller import AuthController  # noqa: E402
+from frimapper.gui.controllers.device_controller import DeviceController  # noqa: E402
+from frimapper.gui.controllers.link_controller import LinkController  # noqa: E402
+from frimapper.gui.views.dialogs import (  # noqa: E402
     DeviceAttributesDialog,
     DeviceDialog,
     LinkDialog,
 )
-from netmap.gui.views.login_view import LoginView  # noqa: E402
-from netmap.gui.views.main_window import MainWindow  # noqa: E402
+from frimapper.gui.views.login_view import LoginView  # noqa: E402
+from frimapper.gui.views.main_window import MainWindow  # noqa: E402
 
 PASSED = 0
 FAILED = 0
@@ -199,7 +199,7 @@ check(
 window.hide()
 
 # ------------------------------------- ExportDialog: filtro de data (clique)
-from netmap.gui.views.dialogs import ExportDialog, VlanDialog  # noqa: E402
+from frimapper.gui.views.dialogs import ExportDialog, VlanDialog  # noqa: E402
 
 export_dialog = ExportDialog(window.exports)
 export_dialog.show()

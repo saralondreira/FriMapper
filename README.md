@@ -7,8 +7,8 @@ de dados única (SQLite); os mapas PNG são gerados a partir dela
 
 | | |
 |---|---|
-| **Versão** | 0.2.0 |
-| **Pacote Python** | `netmap` |
+| **Versão** | 0.3.0 |
+| **Pacote Python** | `frimapper` |
 | **Plataformas** | Windows / Linux |
 | **Python** | 3.11+ |
 | **Documentação** | [`docs/MANUAL.md`](docs/MANUAL.md) (referência técnica) · [`docs/DEVLOG.md`](docs/DEVLOG.md) (decisões e problemas/soluções) |
@@ -111,8 +111,8 @@ graphviz_dot_path = C:/Program Files/Graphviz/bin/dot.exe
 enabled = false
 ```
 
-Env vars: `NETMAP_DATABASE_URL` (connection string),
-`FRIMAPPER_DATA` (pasta de dados), `NETMAP_SP_CLIENT_SECRET` (SharePoint).
+Env vars: `FRIMAPPER_DATABASE_URL` (connection string),
+`FRIMAPPER_DATA` (pasta de dados), `FRIMAPPER_SP_CLIENT_SECRET` (SharePoint).
 
 ## 7. Executável (sem Python instalado)
 
