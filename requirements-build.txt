@@ -1,0 +1,4 @@
+# Dependências de build/empacotamento (não são necessárias em runtime)
+-r requirements.txt
+pyinstaller>=6.3
+Pillow>=10.0
