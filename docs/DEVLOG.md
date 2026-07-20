@@ -280,6 +280,21 @@ ORM nem BD — só DTOs (`gui/dto.py`).
 - **Pendente (inalterado):** verificação formal de marca (EUIPO/INPI) e
   reserva de domínio/PyPI para "frimapper".
 
+### 2026-07-14 · #023 — Build alternativo via auto-py-to-exe
+- **Contexto:** a equipa dispõe do auto-py-to-exe (GUI do PyInstaller) na
+  máquina Windows; a ferramenta não lê ficheiros `.spec`, pelo que o
+  `frimapper.spec` não é diretamente reutilizável nela.
+- **Solução:** config importável `tools/auto_py_to_exe.json` (Settings →
+  Import Config) que replica o spec: onedir, console, `assets/icons`,
+  hidden imports do passlib e `--collect-data/--collect-submodules diagrams`
+  via *manual arguments*. O Graphviz empacota-se em *Additional Files*
+  (`Graphviz\bin` → `graphviz/bin`), reconhecido pelo
+  `runtime.configure_graphviz`. Instruções no README §7.
+- **Validação:** o conjunto de flags equivalente foi construído e o binário
+  passou o `--selftest` (o auto-py-to-exe gera exatamente este comando).
+  O `frimapper.spec` mantém-se o caminho canónico de build (CI/scripts);
+  o JSON é a via de conveniência para builds manuais na GUI.
+
 ### (modelo para a próxima entrada)
 ### AAAA-MM-DD · #00N — Título curto
 - **Problema:** …

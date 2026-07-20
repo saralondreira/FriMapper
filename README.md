@@ -125,6 +125,26 @@ dist/Frimapper/frimapper --selftest    # validação do bundle
 Windows: `tools\build_windows.ps1` (com `-GraphvizHome` para empacotar o
 `dot` — o executável fica autónomo).
 
+### Alternativa: auto-py-to-exe (interface gráfica)
+
+O auto-py-to-exe usa o mesmo PyInstaller por baixo, mas não lê ficheiros
+`.spec` — usa-se o config JSON incluído no repositório:
+
+1. Abrir o auto-py-to-exe **a partir da raiz do projeto** (os caminhos do
+   config são relativos): `cd FriMapper` → `auto-py-to-exe`;
+2. **Settings → Configuration → Import Config From JSON File** →
+   `tools/auto_py_to_exe.json` (preenche script, onedir, console, ícones e
+   hidden imports do passlib + diagrams);
+3. Para **empacotar o Graphviz** (opcional): em *Additional Files* →
+   *Add Folder*, origem `C:\Program Files\Graphviz\bin`, destino
+   `graphviz/bin` — o `runtime.configure_graphviz` encontra-o aí;
+4. *Convert .py to .exe* e validar: `output\Frimapper\Frimapper.exe --selftest`.
+
+Notas: manter **One Directory** (One File atrasa o arranque e não traz
+vantagem — os dados vivem sempre em `%APPDATA%\Frimapper`); "Console Based"
+mantém o output do `--selftest` visível — para distribuir aos utilizadores
+finais pode mudar-se para "Window Based".
+
 ## 8. Problemas comuns no arranque
 
 | Sintoma | Causa/ação |
