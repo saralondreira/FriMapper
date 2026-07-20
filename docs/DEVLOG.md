@@ -295,6 +295,20 @@ ORM nem BD — só DTOs (`gui/dto.py`).
   O `frimapper.spec` mantém-se o caminho canónico de build (CI/scripts);
   o JSON é a via de conveniência para builds manuais na GUI.
 
+### 2026-07-14 · #024 — Falha de arranque sem qualquer pista no Windows
+- **Problema:** num build "Window Based" (sem consola), um erro no arranque
+  faz a aplicação desaparecer sem mensagem; num "Console Based" lançado por
+  duplo-clique, a consola fecha antes de se conseguir ler o traceback.
+  Resultado reportado pelo utilizador: "o programa não executa".
+- **Solução:** `main.py` instala um `sys.excepthook` que grava qualquer
+  exceção fatal em `<dados>/crash.log` (com timestamp, em append) e, se o Qt
+  já estiver de pé, mostra um QMessageBox com o erro e o caminho do log.
+  README §8 ganhou as duas primeiras linhas de diagnóstico: correr o exe a
+  partir de um terminal e consultar o `crash.log`; e o falso positivo
+  SmartScreen/antivírus típico de executáveis PyInstaller não assinados.
+- **Validação:** crash simulado escreve o traceback no `crash.log`; selftest
+  continua OK.
+
 ### (modelo para a próxima entrada)
 ### AAAA-MM-DD · #00N — Título curto
 - **Problema:** …

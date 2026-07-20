@@ -149,6 +149,8 @@ finais pode mudar-se para "Window Based".
 
 | Sintoma | Causa/ação |
 |---|---|
+| O programa não abre / fecha de imediato | Correr a partir de um terminal (`cd` até à pasta do exe → `Frimapper.exe`) para ver o erro, e consultar `%APPDATA%\Frimapper\crash.log` — qualquer erro fatal fica lá registado |
+| Exe bloqueado pelo Windows (SmartScreen/antivírus) | Falso positivo comum em executáveis PyInstaller não assinados: "Mais informações → Executar mesmo assim" ou exclusão no Defender |
 | *"Graphviz ('dot') não encontrado"* ao gerar mapa | Instalar Graphviz ou definir `graphviz_dot_path` no `config.ini`; a restante aplicação funciona |
 | Erro Qt `libEGL.so.1`/sem display (Linux) | Instalar as libs Qt do §1; em headless usar `QT_QPA_PLATFORM=offscreen` |
 | Campos cifrados ilegíveis | A `secret.key` não corresponde à BD — repor a chave do backup |

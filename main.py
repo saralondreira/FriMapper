@@ -13,6 +13,46 @@ import sys
 import tempfile
 
 
+def _install_crash_handler() -> None:
+    """Regista exceções fatais em <dados>/crash.log e mostra um diálogo.
+
+    Num executável "Window Based" não há consola: sem isto, um erro no
+    arranque faz a aplicação desaparecer sem qualquer pista. Com isto, o
+    diagnóstico está sempre em %APPDATA%/Frimapper/crash.log (Windows) ou
+    ~/.frimapper/crash.log (Linux).
+    """
+    import traceback
+    from datetime import datetime
+
+    def _hook(exc_type, exc, tb) -> None:
+        text = "".join(traceback.format_exception(exc_type, exc, tb))
+        sys.stderr.write(text)
+        log_path = None
+        try:
+            from frimapper.paths import data_dir
+
+            log_path = data_dir() / "crash.log"
+            with open(log_path, "a", encoding="utf-8") as fh:
+                fh.write(f"\n--- {datetime.now().isoformat(timespec='seconds')} ---\n")
+                fh.write(text)
+        except Exception:
+            pass  # nem o data_dir está acessível — resta o stderr
+        try:
+            from PySide6.QtWidgets import QApplication, QMessageBox
+
+            if QApplication.instance() is not None:
+                QMessageBox.critical(
+                    None,
+                    "Frimapper — erro fatal",
+                    f"O Frimapper encontrou um erro fatal:\n\n{exc}"
+                    + (f"\n\nDetalhes em:\n{log_path}" if log_path else ""),
+                )
+        except Exception:
+            pass
+
+    sys.excepthook = _hook
+
+
 def run_selftest() -> int:
     """Bootstrap + CRUD mínimo numa pasta temporária; devolve exit code."""
     failures = 0
@@ -108,6 +148,7 @@ def run_gui() -> int:
 
 
 def main() -> int:
+    _install_crash_handler()
     if "--selftest" in sys.argv:
         return run_selftest()
     return run_gui()
